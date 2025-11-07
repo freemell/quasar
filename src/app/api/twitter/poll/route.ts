@@ -427,6 +427,14 @@ export async function POST(req: NextRequest) {
                 console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}. Sent to Telegram for manual posting.`);
               } else {
                 console.log(`✅ Successfully posted reply ${replyId} to tweet ${t.id}`);
+                // Also send to Telegram for manual verification (optional - can be disabled)
+                if (process.env.TELEGRAM_ALWAYS_SEND === 'true') {
+                  console.log(`📱 Also sending reply to Telegram for verification (tweet ${t.id})`);
+                  const telegramSent = await sendTwitterReplyToTelegram(replyText, String(t.id), sig);
+                  if (!telegramSent) {
+                    console.warn(`⚠️ Failed to send reply to Telegram for tweet ${t.id} (non-critical - Twitter post succeeded)`);
+                  }
+                }
                 // Remove from queue if it was queued
                 await QueuedReply.findOneAndDelete({ tweetId: String(t.id) });
               }
