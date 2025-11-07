@@ -11,9 +11,9 @@ Quasar is a blockchain-based tipping platform that enables users to send BNB (Bi
 **Implementation**:
 - Continuously search for tweets mentioning "@Quasartip" using the Search Tweets API
 - Parse tip commands in various formats:
-  - "@Quasartip tip 0.01 bnb @username"
-  - "@Quasartip tip 0.01 @username"
-  - "@Quasartip tip @username 0.01 bnb"
+  - "@Quasartip tip 0.01 bnb to @username"
+  - "@Quasartip tip 0.01 to @username"
+  - "@Quasartip tip @username 0.01 bnb" (legacy format still supported)
 - Extract sender, recipient, amount, and token type from tweet text
 - Process batched tips (multiple tips from same sender to same recipient) into single blockchain transactions
 
@@ -147,7 +147,7 @@ Quasar is a blockchain-based tipping platform that enables users to send BNB (Bi
 
 ## User Experience Flow
 
-1. **User sends tip**: "@Quasartip tip 0.01 bnb @recipient"
+1. **User sends tip**: "@Quasartip tip 0.01 bnb to @recipient"
 2. **Bot detects mention**: Searches for mentions every 2 minutes
 3. **Bot processes tip**: Validates sender, creates recipient wallet if needed, executes blockchain transaction
 4. **Bot replies**: Posts confirmation tweet with transaction hash and BscScan link

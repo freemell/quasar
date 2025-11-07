@@ -11,13 +11,13 @@ const web3 = new Web3(BSC_RPC_URL);
 
 function parseTip(text: string): { amount: number; token: 'BNB'|'USDC'; recipientHandle: string } | null {
   // More flexible parsing - handles formats like:
-  // "@Quasartip tip 0.01 bnb @username"
-  // "@Quasartip tip 0.01 @username"
-  // "@Quasartip tip 0.01BNB @username"
+  // "@Quasartip tip 0.01 bnb to @username"
+  // "@Quasartip tip 0.01 to @username"
+  // "@Quasartip tip 0.01BNB to @username"
   // "@Quasartip tip @username 0.01 bnb"
   
   // First try: standard format with token before recipient
-  let re = /@quasartip\s+tip\s+(\d+(?:\.\d+)?)\s*(bnb|usdc)?\s+@([a-z0-9_]+)/i;
+  let re = /@quasartip\s+tip\s+(\d+(?:\.\d+)?)\s*(bnb|usdc)?\s+(?:to\s+)?@([a-z0-9_]+)/i;
   let m = text.match(re);
   if (m) {
     const amount = Number(m[1]);
@@ -37,7 +37,7 @@ function parseTip(text: string): { amount: number; token: 'BNB'|'USDC'; recipien
   }
   
   // Third try: amount without explicit token (default to BNB), recipient anywhere
-  re = /@quasartip\s+tip\s+(\d+(?:\.\d+)?)\s+@([a-z0-9_]+)/i;
+  re = /@quasartip\s+tip\s+(\d+(?:\.\d+)?)\s+(?:to\s+)?@([a-z0-9_]+)/i;
   m = text.match(re);
   if (m) {
     const amount = Number(m[1]);

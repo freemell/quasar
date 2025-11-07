@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -536,10 +538,15 @@ async function monitorMentions() {
       'tweet.fields': ['author_id', 'conversation_id', 'text', 'created_at'],
       'user.fields': ['username']
     });
-    
-    if (!mentions.data) return;
-    
-    for (const tweet of mentions.data) {
+
+    const tweets = Array.isArray(mentions?.data) ? mentions.data : [];
+
+    if (tweets.length === 0) {
+      console.log('No new mentions found.');
+      return;
+    }
+
+    for (const tweet of tweets) {
       try {
         // Get tweet author info
         const author = await twitterClient.v2.user(tweet.author_id);
