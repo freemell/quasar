@@ -64,9 +64,7 @@ const UserSchema = new Schema<IUser>({
 });
 
 // Create indexes for efficient queries
-// Note: walletAddress already has an index from unique: true, so we don't need to add it again
-UserSchema.index({ twitterId: 1 });
-UserSchema.index({ handle: 1 });
+// Note: twitterId, handle, and walletAddress already have indexes from unique: true, so we don't need to add them again
 
 export default mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
 
