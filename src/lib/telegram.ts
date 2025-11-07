@@ -11,6 +11,7 @@ export async function sendTelegramMessage(text: string): Promise<boolean> {
         hasBotToken: !!TELEGRAM_BOT_TOKEN,
         hasChatId: !!TELEGRAM_CHAT_ID
       });
+      console.warn('⚠️ Make sure TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set in your environment variables');
       return false;
     }
 

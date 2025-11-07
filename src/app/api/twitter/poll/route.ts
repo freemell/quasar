@@ -397,7 +397,10 @@ export async function POST(req: NextRequest) {
               if (!replyId) {
                 // Twitter failed - send to Telegram for manual posting
                 console.log(`📱 Sending reply to Telegram for manual posting (tweet ${t.id})`);
-                await sendTwitterReplyToTelegram(replyText, String(t.id), sig);
+                const telegramSent = await sendTwitterReplyToTelegram(replyText, String(t.id), sig);
+                if (!telegramSent) {
+                  console.error(`❌ Failed to send reply to Telegram for tweet ${t.id}. Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.`);
+                }
                 
                 // Queue the reply for retry
                 const resetTime = getPostTweetRateLimitResetTime();
@@ -432,7 +435,10 @@ export async function POST(req: NextRequest) {
               
               // Twitter failed - send to Telegram for manual posting
               console.log(`📱 Sending reply to Telegram for manual posting (tweet ${t.id})`);
-              await sendTwitterReplyToTelegram(replyText, String(t.id), sig);
+              const telegramSent = await sendTwitterReplyToTelegram(replyText, String(t.id), sig);
+              if (!telegramSent) {
+                console.error(`❌ Failed to send reply to Telegram for tweet ${t.id}. Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.`);
+              }
               
               // Queue the reply for retry
               const resetTime = getPostTweetRateLimitResetTime();
@@ -482,6 +488,13 @@ export async function POST(req: NextRequest) {
             try {
           const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
           if (!replyId) {
+                // Twitter failed - send to Telegram for manual posting
+                console.log(`📱 Sending reply to Telegram for manual posting (tweet ${t.id})`);
+                const telegramSent = await sendTwitterReplyToTelegram(replyText, String(t.id), sig);
+                if (!telegramSent) {
+                  console.error(`❌ Failed to send reply to Telegram for tweet ${t.id}. Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.`);
+                }
+                
                 // Queue the reply for retry
                 const resetTime = getPostTweetRateLimitResetTime();
                 const nextRetryAt = resetTime && resetTime > new Date() 
@@ -504,14 +517,30 @@ export async function POST(req: NextRequest) {
                 );
                 
                 console.log(`📝 Queued reply for tweet ${t.id} to retry at ${nextRetryAt.toISOString()}`);
-                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}. Queued for retry.`);
+                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}. Sent to Telegram for manual posting.`);
               } else {
                 console.log(`✅ Successfully posted reply ${replyId} to tweet ${t.id}`);
+                // Also send to Telegram for manual verification (optional - can be disabled)
+                if (process.env.TELEGRAM_ALWAYS_SEND === 'true') {
+                  console.log(`📱 Also sending reply to Telegram for verification (tweet ${t.id})`);
+                  const telegramSent = await sendTwitterReplyToTelegram(replyText, String(t.id), sig);
+                  if (!telegramSent) {
+                    console.warn(`⚠️ Failed to send reply to Telegram for tweet ${t.id} (non-critical - Twitter post succeeded)`);
+                  }
+                }
                 // Remove from queue if it was queued
                 await QueuedReply.findOneAndDelete({ tweetId: String(t.id) });
               }
             } catch (replyError: any) {
               console.error(`❌ Exception while posting reply to tweet ${t.id}:`, replyError);
+              
+              // Twitter failed - send to Telegram for manual posting
+              console.log(`📱 Sending reply to Telegram for manual posting (tweet ${t.id})`);
+              const telegramSent = await sendTwitterReplyToTelegram(replyText, String(t.id), sig);
+              if (!telegramSent) {
+                console.error(`❌ Failed to send reply to Telegram for tweet ${t.id}. Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.`);
+              }
+              
               // Queue the reply for retry
               const resetTime = getPostTweetRateLimitResetTime();
               const nextRetryAt = resetTime && resetTime > new Date() 
