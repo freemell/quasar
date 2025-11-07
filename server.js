@@ -116,7 +116,7 @@ async function createCustodialWallet(twitterHandle) {
   const privateKey = wallet.privateKey;
   
   // Encrypt private key
-  const password = process.env.ENCRYPTION_PASSWORD || 'default-password';
+  const password = process.env.ENCRYPTION_KEY || 'default-password';
   // Convert private key to buffer for encryption
   const privateKeyBuffer = Buffer.from(privateKey.slice(2), 'hex'); // Remove '0x' prefix
   const { encrypted, nonce } = encryptPrivateKey(privateKeyBuffer, password);
@@ -348,7 +348,7 @@ async function processTipCommand(tweet, senderHandle, recipientHandle) {
     }
     
     // Decrypt sender's private key
-    const password = process.env.ENCRYPTION_PASSWORD || 'default-password';
+    const password = process.env.ENCRYPTION_KEY || 'default-password';
     const privateKey = decryptPrivateKey(sender.encryptedPrivateKey, sender.nonce, password);
     
     // Send transaction (BNB or BEP-20 token)
@@ -456,7 +456,7 @@ async function processGiveawayCommand(tweet, senderHandle) {
     }
     
     // Decrypt sender's private key
-    const password = process.env.ENCRYPTION_PASSWORD || 'default-password';
+    const password = process.env.ENCRYPTION_KEY || 'default-password';
     const privateKey = decryptPrivateKey(sender.encryptedPrivateKey, sender.nonce, password);
     
     // Send tips to winners

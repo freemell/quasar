@@ -14,9 +14,9 @@ export async function GET() {
         uri: process.env.MONGODB_URI ? '✅ Set' : '❌ Missing',
         connection: 'Testing...'
       },
-      solana: {
-        rpc: process.env.NEXT_PUBLIC_SOLANA_RPC_URL ? '✅ Set' : '❌ Missing',
-        network: process.env.SOLANA_NETWORK || 'devnet'
+      bsc: {
+        rpc: process.env.NEXT_PUBLIC_BSC_RPC_URL ? '✅ Set' : '❌ Missing',
+        serverRpc: process.env.BSC_RPC_URL ? '✅ Set' : '❌ Missing'
       },
       encryption: {
         key: process.env.ENCRYPTION_KEY ? '✅ Set' : '❌ Missing'
