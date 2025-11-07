@@ -3,6 +3,9 @@ import { TwitterApi } from 'twitter-api-v2';
 let client: TwitterApi | null = null;
 let bearerClient: any = null;
 
+// Rate limit tracking (in-memory cache)
+let rateLimitResetTime: Date | null = null;
+
 function getTwitterClient() {
   if (!client) {
     if (!process.env.TWITTER_API_KEY || !process.env.TWITTER_API_SECRET) {
@@ -181,6 +184,27 @@ export async function postTweet(text: string, replyToTweetId?: string): Promise<
 }
 
 export async function searchMentions(query: string, sinceId?: string): Promise<any[]> {
+  // Clear rate limit reset time if it has passed
+  if (rateLimitResetTime && rateLimitResetTime <= new Date()) {
+    rateLimitResetTime = null;
+    console.log('✅ Rate limit reset time has passed, clearing cache');
+  }
+  
+  // Check if we're still rate limited before making the API call
+  if (rateLimitResetTime && rateLimitResetTime > new Date()) {
+    const waitTime = rateLimitResetTime.getTime() - Date.now();
+    const waitMinutes = Math.ceil(waitTime / 60000);
+    console.warn(`⚠️ Still rate limited. Reset time: ${rateLimitResetTime.toISOString()}, Wait: ${waitMinutes} minutes`);
+    // Throw an error so the caller knows it's rate limited, not just "no tweets found"
+    const error: any = new Error('Rate limit exceeded');
+    error.code = 429;
+    error.statusCode = 429;
+    error.rateLimit = {
+      reset: Math.floor(rateLimitResetTime.getTime() / 1000)
+    };
+    throw error;
+  }
+  
   try {
     const { bearerClient } = getTwitterClient();
     const res: any = await bearerClient.v2.search(query, {
@@ -231,13 +255,22 @@ export async function searchMentions(query: string, sinceId?: string): Promise<a
     if (error?.code === 429 || error?.statusCode === 429) {
       const rateLimit = error?.rateLimit;
       const resetTime = rateLimit?.reset ? new Date(rateLimit.reset * 1000) : null;
-      const waitTime = resetTime ? Math.max(0, resetTime.getTime() - Date.now()) : 900000; // Default 15 minutes
       
-      console.error('❌ Twitter API: Rate limit exceeded for search mentions', {
-        resetTime: resetTime?.toISOString(),
-        waitTimeMs: waitTime,
-        waitTimeMinutes: Math.ceil(waitTime / 60000)
-      });
+      // Store the reset time to prevent future calls until it resets
+      if (resetTime) {
+        rateLimitResetTime = resetTime;
+        const waitTime = Math.max(0, resetTime.getTime() - Date.now());
+        console.error('❌ Twitter API: Rate limit exceeded for search mentions', {
+          resetTime: resetTime.toISOString(),
+          waitTimeMs: waitTime,
+          waitTimeMinutes: Math.ceil(waitTime / 60000),
+          storedResetTime: rateLimitResetTime.toISOString()
+        });
+      } else {
+        // Default to 15 minutes if no reset time provided
+        rateLimitResetTime = new Date(Date.now() + 900000);
+        console.error('❌ Twitter API: Rate limit exceeded (no reset time), waiting 15 minutes');
+      }
       
       // Return empty array to prevent further processing
       return [];

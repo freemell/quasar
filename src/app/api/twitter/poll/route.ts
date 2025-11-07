@@ -63,12 +63,21 @@ export async function POST(req: NextRequest) {
       } catch (searchError: any) {
         // If rate limited, return early without processing
         if (searchError?.code === 429 || searchError?.statusCode === 429) {
-          console.warn('⚠️ Rate limited - skipping this poll cycle');
+          const rateLimit = searchError?.rateLimit;
+          const resetTime = rateLimit?.reset ? new Date(rateLimit.reset * 1000) : new Date(Date.now() + 900000);
+          const waitMinutes = Math.ceil((resetTime.getTime() - Date.now()) / 60000);
+          
+          console.warn('⚠️ Rate limited - skipping this poll cycle', {
+            resetTime: resetTime.toISOString(),
+            waitMinutes
+          });
+          
           return NextResponse.json({ 
             success: true, 
             processed: 0, 
-            message: 'Rate limited - will retry on next poll',
-            rateLimited: true
+            message: `Rate limited - will retry after ${waitMinutes} minutes`,
+            rateLimited: true,
+            resetTime: resetTime.toISOString()
           });
         }
         // Re-throw other errors
@@ -246,32 +255,43 @@ export async function POST(req: NextRequest) {
       
       if (senderIsRegistered && recipient && recipient.walletAddress && token === 'BNB') {
         try {
+          console.log(`🔄 Starting transaction: sender=${sender.walletAddress}, recipient=${recipient.walletAddress}, amount=${totalAmount} ${token}`);
+          
           // Decrypt sender's private key
+          console.log('🔐 Decrypting sender private key...');
           const privateKeyBytes = decryptPrivateKey(sender.encryptedPrivateKey!);
           const privateKeyHex = '0x' + Buffer.from(privateKeyBytes).toString('hex');
+          console.log('✅ Private key decrypted');
           
           // Create account from private key
+          console.log('🔑 Creating account from private key...');
           const account = web3.eth.accounts.privateKeyToAccount(privateKeyHex);
           const fromAddress = account.address;
+          console.log(`✅ Account created: ${fromAddress}`);
           
           // Verify sender address matches
           if (fromAddress.toLowerCase() !== sender.walletAddress.toLowerCase()) {
-            throw new Error('Sender wallet address mismatch');
+            throw new Error(`Sender wallet address mismatch: ${fromAddress} !== ${sender.walletAddress}`);
           }
+          console.log('✅ Sender address verified');
           
           // Check sender balance before attempting transfer (for total batched amount)
+          console.log('💰 Checking sender balance...');
           const senderBalance = await web3.eth.getBalance(fromAddress);
           const amountWei = web3.utils.toWei(totalAmount.toString(), 'ether');
           const balanceBN = senderBalance; // getBalance returns bigint in Web3.js v4
           const amountBN = BigInt(amountWei.toString());
+          console.log(`✅ Balance checked: ${web3.utils.fromWei(senderBalance.toString(), 'ether')} BNB`);
           
           // Get gas price and estimate gas
+          console.log('⛽ Estimating gas...');
           const gasPrice = await web3.eth.getGasPrice();
           const gasEstimate = await web3.eth.estimateGas({
             from: fromAddress,
             to: recipient.walletAddress,
             value: amountWei
           });
+          console.log(`✅ Gas estimated: ${gasEstimate.toString()}, price: ${gasPrice.toString()}`);
           
           // Calculate total required (amount + gas)
           const gasCost = gasPrice * gasEstimate;
@@ -281,6 +301,7 @@ export async function POST(req: NextRequest) {
             const availableBNB = parseFloat(web3.utils.fromWei(senderBalance.toString(), 'ether'));
             throw new Error(`Insufficient balance. Available: ${availableBNB.toFixed(4)} BNB, Requested: ${totalAmount} BNB (batched ${tips.length} tip(s))`);
           }
+          console.log('✅ Balance sufficient for transaction');
           
           // Create single transaction for all batched tips (one transfer with total amount)
           const tx = {
@@ -294,11 +315,29 @@ export async function POST(req: NextRequest) {
           console.log(`Transferring ${totalAmount} BNB (${tips.length} tip(s) batched) from ${sender.walletAddress} to ${recipient.walletAddress} (recipient handle: ${normalizedRecipientHandle})`);
 
           // Sign and send transaction
-          const signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
-          const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
-          const sig = receipt.transactionHash.toString();
+          let signedTx;
+          let receipt;
+          let sig: string;
+          
+          try {
+            signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
+            console.log('✅ Transaction signed successfully');
+          } catch (signError: any) {
+            console.error('❌ Failed to sign transaction:', signError);
+            throw new Error(`Failed to sign transaction: ${signError?.message || String(signError)}`);
+          }
+          
+          try {
+            receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+            sig = receipt.transactionHash.toString();
+            console.log(`✅ Transaction sent successfully: ${sig}`);
+          } catch (sendError: any) {
+            console.error('❌ Failed to send transaction:', sendError);
+            throw new Error(`Failed to send transaction: ${sendError?.message || String(sendError)}`);
+          }
 
           // Wait for confirmation (polling approach for Web3.js v4)
+          console.log(`⏳ Waiting for transaction confirmation: ${sig}`);
           let confirmedReceipt = null;
           const startTime = Date.now();
           while (Date.now() - startTime < 60000) {
@@ -307,6 +346,7 @@ export async function POST(req: NextRequest) {
               if (!confirmedReceipt.status) {
                 throw new Error('Transaction was reverted');
               }
+              console.log('✅ Transaction confirmed');
               break;
             }
             await new Promise(resolve => setTimeout(resolve, 2000));
