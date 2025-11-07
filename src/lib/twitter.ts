@@ -188,11 +188,40 @@ export async function postTweet(text: string, replyToTweetId?: string): Promise<
       console.error('❌ Twitter API: Unauthorized - Check if your access tokens are valid');
     } else if (error?.code === 429 || error?.statusCode === 429) {
       // Handle rate limiting for posting tweets
-      const rateLimit = error?.rateLimit;
-      const resetTime = rateLimit?.reset ? new Date(rateLimit.reset * 1000) : null;
+      // Try to extract reset time from various possible locations in the error object
+      let resetTime: Date | null = null;
+      
+      // Debug: Log error structure to help identify where reset time might be
+      console.log('🔍 Debugging 429 error structure:', {
+        hasRateLimit: !!error?.rateLimit,
+        rateLimit: error?.rateLimit,
+        hasHeaders: !!error?.headers,
+        headers: error?.headers,
+        hasResponse: !!error?.response,
+        responseHeaders: error?.response?.headers
+      });
+      
+      // Check error.rateLimit.reset (if provided by library)
+      if (error?.rateLimit?.reset) {
+        resetTime = new Date(error.rateLimit.reset * 1000);
+      }
+      // Check error.headers for x-rate-limit-reset (Twitter API v2 standard header)
+      else if (error?.headers?.['x-rate-limit-reset']) {
+        const resetTimestamp = parseInt(error.headers['x-rate-limit-reset']);
+        if (!isNaN(resetTimestamp)) {
+          resetTime = new Date(resetTimestamp * 1000);
+        }
+      }
+      // Check error.response?.headers (alternative location)
+      else if (error?.response?.headers?.['x-rate-limit-reset']) {
+        const resetTimestamp = parseInt(error.response.headers['x-rate-limit-reset']);
+        if (!isNaN(resetTimestamp)) {
+          resetTime = new Date(resetTimestamp * 1000);
+        }
+      }
       
       // Store the reset time to prevent future calls until it resets
-      if (resetTime) {
+      if (resetTime && resetTime > new Date()) {
         postTweetRateLimitResetTime = resetTime;
         const waitTime = Math.max(0, resetTime.getTime() - Date.now());
         console.error('❌ Twitter API: Rate limit exceeded for posting tweets', {
@@ -204,7 +233,9 @@ export async function postTweet(text: string, replyToTweetId?: string): Promise<
       } else {
         // Default to 15 minutes if no reset time provided (Twitter API v2 typically resets every 15 minutes)
         postTweetRateLimitResetTime = new Date(Date.now() + 900000);
-        console.error('❌ Twitter API: Rate limit exceeded for posting tweets (no reset time), waiting 15 minutes');
+        console.error('❌ Twitter API: Rate limit exceeded for posting tweets (no reset time), waiting 15 minutes', {
+          storedResetTime: postTweetRateLimitResetTime.toISOString()
+        });
       }
     }
     
