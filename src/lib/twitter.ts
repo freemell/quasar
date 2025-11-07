@@ -201,22 +201,36 @@ export async function postTweet(text: string, replyToTweetId?: string): Promise<
         responseHeaders: error?.response?.headers
       });
       
-      // Check error.rateLimit.reset (if provided by library)
-      if (error?.rateLimit?.reset) {
-        resetTime = new Date(error.rateLimit.reset * 1000);
+      // Priority 1: Check user 24-hour limit (most restrictive for posting tweets)
+      // If user limit is exhausted, use that reset time
+      if (error?.rateLimit?.userDay?.remaining === 0 && error?.rateLimit?.userDay?.reset) {
+        resetTime = new Date(error.rateLimit.userDay.reset * 1000);
+        console.log('📊 Using user 24-hour limit reset time (most restrictive)');
       }
-      // Check error.headers for x-rate-limit-reset (Twitter API v2 standard header)
+      // Priority 2: Check app 24-hour limit
+      else if (error?.rateLimit?.day?.remaining === 0 && error?.rateLimit?.day?.reset) {
+        resetTime = new Date(error.rateLimit.day.reset * 1000);
+        console.log('📊 Using app 24-hour limit reset time');
+      }
+      // Priority 3: Check 15-minute window reset (error.rateLimit.reset)
+      else if (error?.rateLimit?.reset) {
+        resetTime = new Date(error.rateLimit.reset * 1000);
+        console.log('📊 Using 15-minute window reset time');
+      }
+      // Priority 4: Check error.headers for x-rate-limit-reset (Twitter API v2 standard header)
       else if (error?.headers?.['x-rate-limit-reset']) {
         const resetTimestamp = parseInt(error.headers['x-rate-limit-reset']);
         if (!isNaN(resetTimestamp)) {
           resetTime = new Date(resetTimestamp * 1000);
+          console.log('📊 Using x-rate-limit-reset header');
         }
       }
-      // Check error.response?.headers (alternative location)
+      // Priority 5: Check error.response?.headers (alternative location)
       else if (error?.response?.headers?.['x-rate-limit-reset']) {
         const resetTimestamp = parseInt(error.response.headers['x-rate-limit-reset']);
         if (!isNaN(resetTimestamp)) {
           resetTime = new Date(resetTimestamp * 1000);
+          console.log('📊 Using response headers x-rate-limit-reset');
         }
       }
       
