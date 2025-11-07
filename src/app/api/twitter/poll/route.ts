@@ -188,10 +188,10 @@ export async function POST(req: NextRequest) {
         recipient = await User.findOne({ handle: normalizedRecipientHandle.replace(/^@/, '') });
       }
       
-      // Check if recipient has an account (isEmbedded = true means they've signed up)
-      const recipientHasAccount = !!recipient && recipient.isEmbedded === true;
-      
-      console.log(`Recipient check: handle=${normalizedRecipientHandle}, found=${!!recipient}, hasAccount=${recipientHasAccount}, isEmbedded=${recipient?.isEmbedded}, wallet=${recipient?.walletAddress || 'N/A'}`);
+      // Check if recipient has an account (if they have a walletAddress, they have an account)
+      const recipientHasAccount = !!recipient && !!recipient.walletAddress;
+
+      console.log(`Recipient check: handle=${normalizedRecipientHandle}, found=${!!recipient}, hasAccount=${recipientHasAccount}, wallet=${recipient?.walletAddress || 'N/A'}`);
       
       // Check if sender is registered (has custodial wallet)
       // Look up sender by handle (normalized with @)
@@ -241,8 +241,8 @@ export async function POST(req: NextRequest) {
       }
 
       // User flow logic:
-      // - If recipient HAS an account (isEmbedded = true): send immediately, add to history, reply with BscScan link
-      // - If recipient DOESN'T have an account (isEmbedded = false or no account): record as pending claim, they can claim when they sign up
+      // - If recipient HAS an account (has walletAddress): send immediately, add to history, reply with BscScan link
+      // - If recipient DOESN'T have an account (no walletAddress): record as pending claim, they can claim when they sign up
       // - Only send if sender is registered and recipient has wallet
       
       // IMPORTANT: Mark tweets as processed BEFORE attempting transaction to prevent duplicate processing
