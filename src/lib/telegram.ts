@@ -59,11 +59,17 @@ export async function sendTwitterReplyToTelegram(
   txHash: string
 ): Promise<boolean> {
   try {
+    // Escape HTML special characters in replyText
+    const escapedReplyText = replyText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    
     // Format message for Telegram
     const message = `🐦 <b>Twitter Reply Needed</b>\n\n` +
-      `<b>Reply Text:</b>\n${replyText}\n\n` +
+      `<b>Reply Text:</b>\n<code>${escapedReplyText}</code>\n\n` +
       `<b>Tweet ID:</b> <code>${tweetId}</code>\n` +
-      `<b>Transaction:</b> <a href="https://bscscan.com/tx/${txHash}">${txHash}</a>\n\n` +
+      `<b>Transaction:</b> <a href="https://bscscan.com/tx/${txHash}">View on BscScan</a>\n\n` +
       `<b>Twitter Link:</b> <a href="https://x.com/i/web/status/${tweetId}">View Tweet</a>`;
 
     return await sendTelegramMessage(message);
