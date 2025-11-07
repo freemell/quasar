@@ -1,4 +1,4 @@
-$uri = "https://pourboire.tips/api/twitter/poll"
+$uri = "https://quasar.tips/api/twitter/poll"
 $headers = @{ "Content-Type" = "application/json" }
 $body = "{}"
 

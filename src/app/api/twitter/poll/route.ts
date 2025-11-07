@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
+import ProcessedTweet from '@/models/ProcessedTweet';
 import { searchMentions, postTweet } from '@/lib/twitter';
 import Web3 from 'web3';
 import { decryptPrivateKey } from '@/lib/crypto';
@@ -62,6 +63,21 @@ export async function POST(req: NextRequest) {
 
     // BSC connection is already initialized above
 
+    // Check which tweets have already been processed (deduplication)
+    const tweetIds = tweets.map(t => String(t.id)).filter(Boolean);
+    const processedTweets = await ProcessedTweet.find({ tweetId: { $in: tweetIds } });
+    const processedTweetIds = new Set(processedTweets.map(pt => pt.tweetId));
+    
+    // Filter out already processed tweets
+    const unprocessedTweets = tweets.filter(t => {
+      const tweetId = String(t.id);
+      return tweetId && !processedTweetIds.has(tweetId);
+    });
+    
+    if (unprocessedTweets.length === 0) {
+      return NextResponse.json({ success: true, processed: 0, message: 'All tweets already processed' });
+    }
+
     // Batch tips by sender-to-recipient pairs to combine multiple tips into single transactions
     type BatchedTip = {
       tweet: any;
@@ -75,7 +91,7 @@ export async function POST(req: NextRequest) {
     const batchedTips = new Map<string, BatchedTip[]>();
     
     // First pass: parse all tips and group by sender->recipient
-    for (const t of tweets) {
+    for (const t of unprocessedTweets) {
       const parsed = parseTip(t.text || '');
       if (!parsed) continue;
 
@@ -143,9 +159,10 @@ export async function POST(req: NextRequest) {
         recipient = await User.findOne({ handle: normalizedRecipientHandle.replace(/^@/, '') });
       }
       
-      const recipientIsExistingUser = !!recipient && !!recipient.walletAddress && !!recipient.encryptedPrivateKey;
+      // Check if recipient has an account (isEmbedded = true means they've signed up)
+      const recipientHasAccount = !!recipient && recipient.isEmbedded === true;
       
-      console.log(`Recipient check: handle=${normalizedRecipientHandle}, found=${!!recipient}, existing=${recipientIsExistingUser}, wallet=${recipient?.walletAddress || 'N/A'}`);
+      console.log(`Recipient check: handle=${normalizedRecipientHandle}, found=${!!recipient}, hasAccount=${recipientHasAccount}, isEmbedded=${recipient?.isEmbedded}, wallet=${recipient?.walletAddress || 'N/A'}`);
       
       // Check if sender is registered (has custodial wallet)
       // Look up sender by handle (normalized with @)
@@ -194,9 +211,10 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Always attempt transfer if sender is registered and recipient has wallet
-      // If sender is not registered, we can't transfer yet (no sender wallet)
-      // But we still generate recipient wallet and record pending claim
+      // User flow logic:
+      // - If recipient HAS an account (isEmbedded = true): send immediately, add to history, reply with BscScan link
+      // - If recipient DOESN'T have an account (isEmbedded = false or no account): record as pending claim, they can claim when they sign up
+      // - Only send if sender is registered and recipient has wallet
       if (senderIsRegistered && recipient && recipient.walletAddress && token === 'BNB') {
         try {
           // Decrypt sender's private key
@@ -268,7 +286,7 @@ export async function POST(req: NextRequest) {
             throw new Error('Transaction confirmation timeout');
           }
 
-          // Record in both users' history (one entry for the batched transaction)
+          // Record in sender's history (one entry for the batched transaction)
           sender.history.push({
             type: 'transfer',
             amount: totalAmount,
@@ -277,35 +295,73 @@ export async function POST(req: NextRequest) {
             txHash: sig,
             date: new Date()
           });
-          recipient.history.push({
-            type: 'tip',
-            amount: totalAmount,
-            token: token,
-            counterparty: senderHandle,
-            txHash: sig,
-            date: new Date()
-          });
 
-          // Remove all pending claims for batched tips
-          const tweetIds = tips.map(tip => tip.tweetId);
-          recipient.pendingClaims = recipient.pendingClaims.filter(
-            (p: any) => !(tweetIds.includes(p.fromTx) && p.sender === senderHandle)
-          );
+          // If recipient HAS an account: add to their history and reply with BscScan link
+          // If recipient DOESN'T have an account: record as pending claim (they can claim when they sign up)
+          if (recipientHasAccount) {
+            // Recipient has account - add to history immediately
+            recipient.history.push({
+              type: 'tip',
+              amount: totalAmount,
+              token: token,
+              counterparty: senderHandle,
+              txHash: sig,
+              date: new Date()
+            });
+
+            // Remove all pending claims for batched tips (they're now in history)
+            const tweetIds = tips.map(tip => tip.tweetId);
+            recipient.pendingClaims = recipient.pendingClaims.filter(
+              (p: any) => !(tweetIds.includes(p.fromTx) && p.sender === senderHandle)
+            );
+
+            // Post success message with BscScan link - recipient has account, so they receive immediately
+            const tipText = tips.length === 1 
+              ? `A ${totalAmount} ${token} tip has been sent to your wallet!`
+              : `${tips.length} tips totaling ${totalAmount} ${token} have been sent to your wallet!`;
+            const replyText = `@${recipientUsername} pay from @${senderUsername} ${tipText} Tx: https://bscscan.com/tx/${sig}`;
+            const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
+            if (!replyId) {
+              console.error(`Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+            }
+          } else {
+            // Recipient doesn't have account - record as pending claim (they can claim when they sign up)
+            const tweetIds = tips.map(tip => tip.tweetId);
+            for (const tip of tips) {
+              const existingClaim = recipient.pendingClaims.find(
+                (p: any) => p.fromTx === tip.tweetId && p.sender === senderHandle
+              );
+              if (!existingClaim) {
+                recipient.pendingClaims.push({
+                  amount: tip.amount,
+                  token: tip.token,
+                  fromTx: tip.tweetId,
+                  sender: senderHandle
+                });
+              }
+            }
+
+            // Post message telling them to claim when they sign up
+            const tipText = tips.length === 1 
+              ? `A ${totalAmount} ${token} tip has been sent to your wallet!`
+              : `${tips.length} tips totaling ${totalAmount} ${token} have been sent to your wallet!`;
+            const replyText = `@${recipientUsername} pay from @${senderUsername} ${tipText} Claim it when you sign up on quasar.tips. Tx: https://bscscan.com/tx/${sig}`;
+            const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
+            if (!replyId) {
+              console.error(`Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+            }
+          }
 
           await sender.save();
           await recipient.save();
 
-      // Post success message with BscScan link - transfer succeeded
-      // Recipient wallet was generated and BNB was transferred immediately (even if recipient hasn't signed up yet)
-      // When recipient signs up, they'll see the BNB already in their wallet
-      // Format: "@recipient pay from @sender A X BNB tip(s) have been sent to your wallet! You will see it when you create an account on quasar.tips. Tx: https://bscscan.com/tx/..."
-      const tipText = tips.length === 1 
-        ? `A ${totalAmount} ${token} tip has been sent to your wallet!`
-        : `${tips.length} tips totaling ${totalAmount} ${token} have been sent to your wallet!`;
-      const replyText = `@${recipientUsername} pay from @${senderUsername} ${tipText} You will see it when you create an account on quasar.tips. Tx: https://bscscan.com/tx/${sig}`;
-          const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
-          if (!replyId) {
-            console.error(`Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+          // Mark all tweets in this batch as processed
+          for (const tip of tips) {
+            await ProcessedTweet.findOneAndUpdate(
+              { tweetId: tip.tweetId },
+              { tweetId: tip.tweetId, processedAt: new Date() },
+              { upsert: true, new: true }
+            );
           }
           
         } catch (e: any) {
@@ -331,6 +387,15 @@ export async function POST(req: NextRequest) {
           const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
           if (!replyId) {
             console.error(`Failed to post reply to tweet ${t.id} (transfer failed). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+          }
+          
+          // Mark tweets as processed even if transfer failed (to prevent retrying)
+          for (const tip of tips) {
+            await ProcessedTweet.findOneAndUpdate(
+              { tweetId: tip.tweetId },
+              { tweetId: tip.tweetId, processedAt: new Date() },
+              { upsert: true, new: true }
+            );
           }
         }
       } else {
@@ -361,6 +426,15 @@ export async function POST(req: NextRequest) {
         const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
         if (!replyId) {
           console.error(`Failed to post reply to tweet ${t.id} (sender not registered). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+        }
+        
+        // Mark tweets as processed even if sender not registered (to prevent retrying)
+        for (const tip of tips) {
+          await ProcessedTweet.findOneAndUpdate(
+            { tweetId: tip.tweetId },
+            { tweetId: tip.tweetId, processedAt: new Date() },
+            { upsert: true, new: true }
+          );
         }
       }
 
