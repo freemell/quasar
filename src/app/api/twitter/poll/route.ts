@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
 import ProcessedTweet from '@/models/ProcessedTweet';
-import { searchMentions, postTweet } from '@/lib/twitter';
+import QueuedReply from '@/models/QueuedReply';
+import { searchMentions, postTweet, getPostTweetRateLimitResetTime } from '@/lib/twitter';
 import Web3 from 'web3';
 import { decryptPrivateKey } from '@/lib/crypto';
 
@@ -393,12 +394,57 @@ export async function POST(req: NextRequest) {
             try {
               const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
               if (!replyId) {
-                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}. Check logs above for detailed error from postTweet function.`);
+                // Queue the reply for retry
+                const resetTime = getPostTweetRateLimitResetTime();
+                const nextRetryAt = resetTime && resetTime > new Date() 
+                  ? resetTime 
+                  : new Date(Date.now() + 15 * 60 * 1000); // Default to 15 minutes
+                
+                await QueuedReply.findOneAndUpdate(
+                  { tweetId: String(t.id) },
+                  {
+                    tweetId: String(t.id),
+                    replyText,
+                    replyToTweetId: String(t.id),
+                    txHash: sig,
+                    nextRetryAt,
+                    status: 'pending',
+                    $inc: { attempts: 1 },
+                    lastAttemptAt: new Date()
+                  },
+                  { upsert: true, new: true }
+                );
+                
+                console.log(`📝 Queued reply for tweet ${t.id} to retry at ${nextRetryAt.toISOString()}`);
+                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}. Queued for retry.`);
               } else {
                 console.log(`✅ Successfully posted reply ${replyId} to tweet ${t.id}`);
+                // Remove from queue if it was queued
+                await QueuedReply.findOneAndDelete({ tweetId: String(t.id) });
               }
             } catch (replyError: any) {
               console.error(`❌ Exception while posting reply to tweet ${t.id}:`, replyError);
+              // Queue the reply for retry
+              const resetTime = getPostTweetRateLimitResetTime();
+              const nextRetryAt = resetTime && resetTime > new Date() 
+                ? resetTime 
+                : new Date(Date.now() + 15 * 60 * 1000);
+              
+              await QueuedReply.findOneAndUpdate(
+                { tweetId: String(t.id) },
+                {
+                  tweetId: String(t.id),
+                  replyText,
+                  replyToTweetId: String(t.id),
+                  txHash: sig,
+                  nextRetryAt,
+                  status: 'pending',
+                  error: replyError?.message || String(replyError),
+                  $inc: { attempts: 1 },
+                  lastAttemptAt: new Date()
+                },
+                { upsert: true, new: true }
+              );
             }
           } else {
             // Recipient doesn't have account - record as pending claim (they can claim when they sign up)
@@ -426,12 +472,57 @@ export async function POST(req: NextRequest) {
             try {
               const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
               if (!replyId) {
-                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}. Check logs above for detailed error from postTweet function.`);
+                // Queue the reply for retry
+                const resetTime = getPostTweetRateLimitResetTime();
+                const nextRetryAt = resetTime && resetTime > new Date() 
+                  ? resetTime 
+                  : new Date(Date.now() + 15 * 60 * 1000); // Default to 15 minutes
+                
+                await QueuedReply.findOneAndUpdate(
+                  { tweetId: String(t.id) },
+                  {
+                    tweetId: String(t.id),
+                    replyText,
+                    replyToTweetId: String(t.id),
+                    txHash: sig,
+                    nextRetryAt,
+                    status: 'pending',
+                    $inc: { attempts: 1 },
+                    lastAttemptAt: new Date()
+                  },
+                  { upsert: true, new: true }
+                );
+                
+                console.log(`📝 Queued reply for tweet ${t.id} to retry at ${nextRetryAt.toISOString()}`);
+                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}. Queued for retry.`);
               } else {
                 console.log(`✅ Successfully posted reply ${replyId} to tweet ${t.id}`);
+                // Remove from queue if it was queued
+                await QueuedReply.findOneAndDelete({ tweetId: String(t.id) });
               }
             } catch (replyError: any) {
               console.error(`❌ Exception while posting reply to tweet ${t.id}:`, replyError);
+              // Queue the reply for retry
+              const resetTime = getPostTweetRateLimitResetTime();
+              const nextRetryAt = resetTime && resetTime > new Date() 
+                ? resetTime 
+                : new Date(Date.now() + 15 * 60 * 1000);
+              
+              await QueuedReply.findOneAndUpdate(
+                { tweetId: String(t.id) },
+                {
+                  tweetId: String(t.id),
+                  replyText,
+                  replyToTweetId: String(t.id),
+                  txHash: sig,
+                  nextRetryAt,
+                  status: 'pending',
+                  error: replyError?.message || String(replyError),
+                  $inc: { attempts: 1 },
+                  lastAttemptAt: new Date()
+                },
+                { upsert: true, new: true }
+              );
             }
           }
 

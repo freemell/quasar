@@ -9,12 +9,27 @@ $pollInterval = 30
 Write-Host "Polling $uri every $pollInterval seconds. Press Ctrl+C to stop."
 Write-Host "Note: Using $pollInterval second interval to avoid Twitter API rate limits (300 requests per 15 minutes)"
 
+$retryUri = "https://quasar.tips/api/twitter/retry-replies"
+
 while ($true) {
   try {
+    # Poll for new mentions
     $res = Invoke-RestMethod -Method Post -Uri $uri -ContentType "application/json" -Body $body -TimeoutSec 25
     
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Write-Host "[$ts] success=$($res.success) processed=$($res.processed)"
+    Write-Host "[$ts] Poll: success=$($res.success) processed=$($res.processed)"
+    
+    # Also retry queued replies
+    try {
+      $retryRes = Invoke-RestMethod -Method Post -Uri $retryUri -ContentType "application/json" -Body $body -TimeoutSec 25
+      if ($retryRes.processed -gt 0) {
+        Write-Host "[$ts] Retry: processed=$($retryRes.processed) succeeded=$($retryRes.succeeded) failed=$($retryRes.failed)"
+      }
+    } catch {
+      # Ignore retry errors, just log them
+      $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+      Write-Warning "[$ts] Retry error: $($_.Exception.Message)"
+    }
   } catch {
     $msg = $_.Exception.Message
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

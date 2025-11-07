@@ -7,6 +7,11 @@ let bearerClient: any = null;
 let rateLimitResetTime: Date | null = null; // For search mentions
 let postTweetRateLimitResetTime: Date | null = null; // For posting tweets
 
+// Export reset time so other modules can check it
+export function getPostTweetRateLimitResetTime(): Date | null {
+  return postTweetRateLimitResetTime;
+}
+
 function getTwitterClient() {
   if (!client) {
     if (!process.env.TWITTER_API_KEY || !process.env.TWITTER_API_SECRET) {
