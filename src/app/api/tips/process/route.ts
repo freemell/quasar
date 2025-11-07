@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     await recipient.save();
 
     // Post confirmation tweet
-    const confirmationText = `✅ Tip sent! ${amount} ${token} to ${recipientHandle}\nTx: ${txHash}`;
+    const confirmationText = `✅ Tip sent! ${amount} ${token} to ${recipientHandle}\nTx: https://bscscan.com/tx/${txHash}`;
     await postTweet(confirmationText);
 
     return NextResponse.json({

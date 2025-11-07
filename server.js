@@ -383,7 +383,7 @@ async function processTipCommand(tweet, senderHandle, recipientHandle) {
     
     // Reply to tweet
     await twitterClient.v2.tweet({
-      text: `✅ Tip sent! ${tipCommand.amount} ${tipCommand.token} sent to @${recipientHandle}\nTx: ${txHash}`,
+      text: `✅ Tip sent! ${tipCommand.amount} ${tipCommand.token} sent to @${recipientHandle}\nTx: https://bscscan.com/tx/${txHash}`,
       reply: {
         in_reply_to_tweet_id: tweet.id
       }
