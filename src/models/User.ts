@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface ITransaction {
   type: 'tip' | 'transfer';
   amount: number;
-  token: 'SOL' | 'USDC';
+  token: 'BNB' | 'USDC';
   counterparty: string;
   txHash: string;
   date: Date;
@@ -35,7 +35,7 @@ export interface IUser extends Document {
 const TransactionSchema = new Schema<ITransaction>({
   type: { type: String, enum: ['tip', 'transfer'], required: true },
   amount: { type: Number, required: true },
-  token: { type: String, enum: ['SOL', 'USDC'], required: true },
+  token: { type: String, enum: ['BNB', 'USDC'], required: true },
   counterparty: { type: String, required: true },
   txHash: { type: String, required: true },
   date: { type: Date, default: Date.now }
