@@ -4,7 +4,8 @@ let client: TwitterApi | null = null;
 let bearerClient: any = null;
 
 // Rate limit tracking (in-memory cache)
-let rateLimitResetTime: Date | null = null;
+let rateLimitResetTime: Date | null = null; // For search mentions
+let postTweetRateLimitResetTime: Date | null = null; // For posting tweets
 
 function getTwitterClient() {
   if (!client) {
@@ -92,6 +93,20 @@ export async function getUserProfile(userId: string): Promise<TwitterUser | null
 }
 
 export async function postTweet(text: string, replyToTweetId?: string): Promise<string | null> {
+  // Clear rate limit reset time if it has passed
+  if (postTweetRateLimitResetTime && postTweetRateLimitResetTime <= new Date()) {
+    postTweetRateLimitResetTime = null;
+    console.log('✅ Post tweet rate limit reset time has passed, clearing cache');
+  }
+  
+  // Check if we're still rate limited before making the API call
+  if (postTweetRateLimitResetTime && postTweetRateLimitResetTime > new Date()) {
+    const waitTime = postTweetRateLimitResetTime.getTime() - Date.now();
+    const waitMinutes = Math.ceil(waitTime / 60000);
+    console.warn(`⚠️ Still rate limited for posting tweets. Reset time: ${postTweetRateLimitResetTime.toISOString()}, Wait: ${waitMinutes} minutes`);
+    return null;
+  }
+  
   try {
     // Check if Twitter API credentials are configured
     if (!process.env.TWITTER_API_KEY || !process.env.TWITTER_API_SECRET || 
@@ -172,7 +187,25 @@ export async function postTweet(text: string, replyToTweetId?: string): Promise<
     } else if (error?.code === 401 || error?.statusCode === 401) {
       console.error('❌ Twitter API: Unauthorized - Check if your access tokens are valid');
     } else if (error?.code === 429 || error?.statusCode === 429) {
-      console.error('❌ Twitter API: Rate limit exceeded - Wait before retrying');
+      // Handle rate limiting for posting tweets
+      const rateLimit = error?.rateLimit;
+      const resetTime = rateLimit?.reset ? new Date(rateLimit.reset * 1000) : null;
+      
+      // Store the reset time to prevent future calls until it resets
+      if (resetTime) {
+        postTweetRateLimitResetTime = resetTime;
+        const waitTime = Math.max(0, resetTime.getTime() - Date.now());
+        console.error('❌ Twitter API: Rate limit exceeded for posting tweets', {
+          resetTime: resetTime.toISOString(),
+          waitTimeMs: waitTime,
+          waitTimeMinutes: Math.ceil(waitTime / 60000),
+          storedResetTime: postTweetRateLimitResetTime.toISOString()
+        });
+      } else {
+        // Default to 15 minutes if no reset time provided (Twitter API v2 typically resets every 15 minutes)
+        postTweetRateLimitResetTime = new Date(Date.now() + 900000);
+        console.error('❌ Twitter API: Rate limit exceeded for posting tweets (no reset time), waiting 15 minutes');
+      }
     }
     
     // Also log to a file or external service in production
