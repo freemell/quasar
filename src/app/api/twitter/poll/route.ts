@@ -393,7 +393,7 @@ export async function POST(req: NextRequest) {
             try {
               const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
               if (!replyId) {
-                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}. Check logs above for detailed error from postTweet function.`);
               } else {
                 console.log(`✅ Successfully posted reply ${replyId} to tweet ${t.id}`);
               }
@@ -426,7 +426,7 @@ export async function POST(req: NextRequest) {
             try {
               const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
               if (!replyId) {
-                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}. Check logs above for detailed error from postTweet function.`);
               } else {
                 console.log(`✅ Successfully posted reply ${replyId} to tweet ${t.id}`);
               }
