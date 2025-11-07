@@ -366,7 +366,7 @@ export default function Dashboard() {
                     <h2 className="text-2xl font-extralight tracking-tight text-[#e6e1d7]">{userData.name || 'User'}</h2>
                     <p className="text-[#c8b4a0] text-sm font-light">{userData.handle || '@username'}</p>
                   </div>
-                </div>
+                    </div>
 
                 {/* Balance Section - Prominently Displayed */}
                 <div className="mb-8">
@@ -376,8 +376,8 @@ export default function Dashboard() {
                   </div>
                   <div className="text-sm text-[#a89080] font-light">
                     ≈ ${(balance * bnbPrice).toFixed(2)} USD
-                  </div>
                 </div>
+              </div>
 
                 {/* Action Buttons */}
                 <div className="flex gap-4 mb-8">
@@ -388,25 +388,25 @@ export default function Dashboard() {
                     <Plus className="w-4 h-4" />
                     Add Funds
                   </button>
-                  <button 
+                <button
                     onClick={() => setShowWithdraw(true)}
                     className="flex-1 border border-[#c8b4a0]/30 hover:bg-white/5 text-[#e6e1d7] py-3 px-6 rounded-lg transition-colors font-light tracking-tight flex items-center justify-center gap-2"
                   >
                     <Minus className="w-4 h-4" />
                     Withdraw
-                  </button>
-                </div>
+                </button>
+            </div>
 
                 {/* Wallet Address Section */}
                 <div className="space-y-4 pt-6 border-t border-[#c8b4a0]/10">
-                  <div>
+                        <div>
                     <div className="text-xs text-[#c8b4a0]/70 font-light mb-2">Wallet Address</div>
                     <div className="flex items-center justify-between bg-[#1a1d18]/50 rounded-lg p-3 border border-[#c8b4a0]/10">
                       <span className="font-mono text-sm text-[#e6e1d7]">
                         {tipAddress ? formatAddress(tipAddress) : 'Loading...'}
                       </span>
                       <div className="flex gap-2">
-                        <button
+                      <button 
                           onClick={() => {
                             if (tipAddress) { 
                               navigator.clipboard.writeText(tipAddress); 
@@ -443,11 +443,11 @@ export default function Dashboard() {
                           }}
                           className="p-2 hover:bg-white/10 rounded transition-colors"
                           title="Export Wallet"
-                        >
+                      >
                           <Download className="w-4 h-4 text-[#c8b4a0]" />
-                        </button>
-                      </div>
+                      </button>
                     </div>
+                  </div>
                   </div>
                   
                   {/* Contract Address (if applicable) */}
@@ -457,7 +457,7 @@ export default function Dashboard() {
                       <span className="font-mono text-sm text-[#e6e1d7]">
                         {tipAddress ? formatAddress(tipAddress) : 'N/A'}
                       </span>
-                      <button
+                      <button 
                         onClick={() => {
                           if (tipAddress) { 
                             navigator.clipboard.writeText(tipAddress); 
@@ -481,7 +481,7 @@ export default function Dashboard() {
               {/* Header with Refresh Button */}
               <div className="flex items-center justify-between p-6 border-b border-[#c8b4a0]/10">
                 <h3 className="text-xl font-extralight tracking-tight text-[#e6e1d7]">Wallet Transaction History</h3>
-                <button
+                              <button
                   onClick={async () => {
                     if (tipAddress) {
                       await fetchPendingAndHistory(tipAddress);
@@ -492,8 +492,8 @@ export default function Dashboard() {
                   title="Refresh"
                 >
                   <RefreshCw className="w-5 h-5 text-[#c8b4a0]" />
-                </button>
-              </div>
+                              </button>
+                            </div>
 
               {/* Filter Tabs */}
               <div className="flex border-b border-[#c8b4a0]/10">
@@ -508,8 +508,8 @@ export default function Dashboard() {
                   >
                     {filter}
                   </button>
-                ))}
-              </div>
+                      ))}
+                    </div>
 
               {/* Transaction List */}
               <div className="p-6">
@@ -521,50 +521,50 @@ export default function Dashboard() {
                   <div className="space-y-4">
                     {history.map((tx, idx) => (
                       <div key={idx} className="flex items-center justify-between p-4 bg-[#2a2e26]/50 rounded-lg border border-[#c8b4a0]/5 hover:bg-[#2a2e26] transition-colors">
-                        <div className="flex items-center space-x-4">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          <div className="flex items-center space-x-4">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                             tx.type === 'transfer' ? 'bg-[#6b5545]/20' : 'bg-[#c8b4a0]/20'
-                          }`}>
+                            }`}>
                             {tx.type === 'transfer' ? (
                               <Minus className="w-5 h-5 text-[#c8b4a0]" />
                             ) : (
                               <Plus className="w-5 h-5 text-[#c8b4a0]" />
                             )}
-                          </div>
-                          <div>
-                            <div className="text-[#e6e1d7] font-light">
-                              {tx.type === 'transfer' ? 'Sent to' : 'Received from'} {tx.counterparty}
                             </div>
+                            <div>
+                            <div className="text-[#e6e1d7] font-light">
+                                {tx.type === 'transfer' ? 'Sent to' : 'Received from'} {tx.counterparty}
+                              </div>
                             <div className="text-sm text-[#a89080] font-light flex items-center gap-2">
                               <span>{formatDate(new Date(tx.date))}</span>
-                              <a 
+                                <a 
                                 href={`https://bscscan.com/tx/${tx.txHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
                                 className="text-[#c8b4a0] hover:text-[#e6e1d7] flex items-center gap-1"
-                              >
+                                >
                                 View on BscScan
                                 <ExternalLink className="w-3 h-3" />
-                              </a>
+                                </a>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="text-right">
+                          <div className="text-right">
                           <div className={`text-lg font-light ${
                             tx.type === 'transfer' ? 'text-[#c8b4a0]' : 'text-[#c8b4a0]'
-                          }`}>
-                            {tx.type === 'transfer' ? '-' : '+'}{formatAmount(tx.amount, tx.token)}
-                          </div>
+                            }`}>
+                              {tx.type === 'transfer' ? '-' : '+'}{formatAmount(tx.amount, tx.token)}
+                            </div>
                           <div className="text-xs text-[#a89080] capitalize font-light">
-                            {tx.type}
+                              {tx.type}
                           </div>
                         </div>
                       </div>
                     ))}
-                  </div>
-                )}
               </div>
-            </div>
+            )}
+                </div>
+                  </div>
 
             {/* Additional Settings/Features (Hidden by default, can be shown via tabs if needed) */}
             {false && (

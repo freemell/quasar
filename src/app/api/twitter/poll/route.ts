@@ -346,7 +346,7 @@ export async function POST(req: NextRequest) {
             if (confirmedReceipt) {
               if (!confirmedReceipt.status) {
                 throw new Error('Transaction was reverted');
-              }
+            }
               console.log('✅ Transaction confirmed');
               break;
             }
@@ -370,20 +370,20 @@ export async function POST(req: NextRequest) {
           // If recipient DOESN'T have an account: record as pending claim (they can claim when they sign up)
           if (recipientHasAccount) {
             // Recipient has account - add to history immediately
-            recipient.history.push({
-              type: 'tip',
-              amount: totalAmount,
-              token: token,
-              counterparty: senderHandle,
-              txHash: sig,
-              date: new Date()
-            });
+          recipient.history.push({
+            type: 'tip',
+            amount: totalAmount,
+            token: token,
+            counterparty: senderHandle,
+            txHash: sig,
+            date: new Date()
+          });
 
             // Remove all pending claims for batched tips (they're now in history)
-            const tweetIds = tips.map(tip => tip.tweetId);
-            recipient.pendingClaims = recipient.pendingClaims.filter(
-              (p: any) => !(tweetIds.includes(p.fromTx) && p.sender === senderHandle)
-            );
+          const tweetIds = tips.map(tip => tip.tweetId);
+          recipient.pendingClaims = recipient.pendingClaims.filter(
+            (p: any) => !(tweetIds.includes(p.fromTx) && p.sender === senderHandle)
+          );
 
             // Post success message with BscScan link - recipient has account, so they receive immediately
             const tipText = tips.length === 1 
@@ -464,14 +464,14 @@ export async function POST(req: NextRequest) {
             }
 
             // Post message telling them to claim when they sign up
-            const tipText = tips.length === 1 
-              ? `A ${totalAmount} ${token} tip has been sent to your wallet!`
-              : `${tips.length} tips totaling ${totalAmount} ${token} have been sent to your wallet!`;
+          const tipText = tips.length === 1 
+            ? `A ${totalAmount} ${token} tip has been sent to your wallet!`
+            : `${tips.length} tips totaling ${totalAmount} ${token} have been sent to your wallet!`;
             const replyText = `@${recipientUsername} pay from @${senderUsername} ${tipText} Claim it when you sign up on quasar.tips. Tx: https://bscscan.com/tx/${sig}`;
             console.log(`Attempting to post reply to tweet ${t.id}:`, replyText);
             try {
-              const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
-              if (!replyId) {
+          const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
+          if (!replyId) {
                 // Queue the reply for retry
                 const resetTime = getPostTweetRateLimitResetTime();
                 const nextRetryAt = resetTime && resetTime > new Date() 
@@ -550,8 +550,8 @@ export async function POST(req: NextRequest) {
           }
           const message = `@${recipientUsername} pay from @${senderUsername} ${tips.length === 1 ? `A ${totalAmount} ${token} tip` : `${tips.length} tips totaling ${totalAmount} ${token}`} ${tips.length === 1 ? 'has' : 'have'} been recorded for you! Claim ${tips.length === 1 ? 'it' : 'them'} to receive the BscScan link:`;
           try {
-            const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
-            if (!replyId) {
+          const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
+          if (!replyId) {
               console.error(`❌ Failed to post reply to tweet ${t.id} (transfer failed). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
             }
           } catch (replyError: any) {
@@ -584,8 +584,8 @@ export async function POST(req: NextRequest) {
         // Note: Sender must sign up on quasar.tips first to fund their wallet before the tip can be sent
         const message = `@${recipientUsername} pay from @${senderUsername} ${tips.length === 1 ? `A ${totalAmount} ${token} tip` : `${tips.length} tips totaling ${totalAmount} ${token}`} ${tips.length === 1 ? 'has' : 'have'} been recorded for you! The sender needs to sign up on quasar.tips first. Claim ${tips.length === 1 ? 'it' : 'them'} to receive the BscScan link:`;
         try {
-          const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
-          if (!replyId) {
+        const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
+        if (!replyId) {
             console.error(`❌ Failed to post reply to tweet ${t.id} (sender not registered). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
           }
         } catch (replyError: any) {
