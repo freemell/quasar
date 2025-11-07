@@ -5,10 +5,15 @@
 **The rate limit is on the Quasar bot account (the one posting replies), NOT individual users.**
 
 ### Current Situation:
-- **Twitter API Basic Tier**: 100 tweets/day limit
-- **All users share this limit** - when 100 people tip, only 100 replies can be sent per day
-- **You tested multiple times** - this exhausted the daily limit quickly
-- **Reset time**: Every 24 hours (rolling window)
+- **Twitter API has MULTIPLE rate limits:**
+  1. **Monthly Post Cap**: 15,000/month (9 used - NOT the issue)
+  2. **Daily User Limit**: 100 tweets/day (rolling 24-hour window) - **THIS IS WHAT'S HITTING**
+  3. **3-Hour Window**: 300 tweets per 3 hours (separate limit)
+  
+- **Daily limit is a ROLLING 24-hour window** - not a calendar day
+- If you sent 100 tweets in the last 24 hours (even yesterday), you're rate limited
+- **All users share this daily limit** - when 100 people tip, only 100 replies can be sent per day
+- **Reset time**: Rolling 24-hour window (resets when oldest tweet in the window expires)
 
 ### What Happens When 100 People Use It:
 - First 100 tips: ✅ Replies sent immediately
