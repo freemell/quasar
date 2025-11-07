@@ -31,20 +31,17 @@ const config = createConfig({
   },
 });
 
-// Create Web3Modal
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '';
-if (projectId) {
-  createWeb3Modal({
-    wagmiConfig: config,
-    projectId,
-    chains,
-    themeMode: 'dark',
-    themeVariables: {
-      '--w3m-color-mix': '#6b5545',
-      '--w3m-color-mix-strength': 20,
-    },
-  });
-}
+// Create Web3Modal (always initialize, even without projectId for development)
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'default-project-id';
+createWeb3Modal({
+  wagmiConfig: config,
+  projectId,
+  themeMode: 'dark',
+  themeVariables: {
+    '--w3m-color-mix': '#6b5545',
+    '--w3m-color-mix-strength': 20,
+  },
+});
 
 // Create React Query client
 const queryClient = new QueryClient();

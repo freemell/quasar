@@ -165,7 +165,7 @@ async function processBSCTransfer(sender: any, recipient: any, amount: number, t
       const signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
       const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
       
-      return receipt.transactionHash;
+      return receipt.transactionHash.toString();
     } else {
       // Send BEP-20 token (USDC, USDT, etc.)
       const tokenAddresses: { [key: string]: string } = {
@@ -201,7 +201,8 @@ async function processBSCTransfer(sender: any, recipient: any, amount: number, t
       
       const tokenContract = new web3.eth.Contract(tokenAbi, tokenAddress);
       const decimals = await tokenContract.methods.decimals().call();
-      const amountWei = web3.utils.toBN(amount).mul(web3.utils.toBN(10).pow(web3.utils.toBN(decimals)));
+      // Use BigInt for calculations in Web3.js v4
+      const amountWei = BigInt(Math.floor(amount * Math.pow(10, Number(decimals))));
       
       const data = tokenContract.methods.transfer(recipient.walletAddress, amountWei.toString()).encodeABI();
       
@@ -216,14 +217,14 @@ async function processBSCTransfer(sender: any, recipient: any, amount: number, t
         from: fromAddress,
         to: tokenAddress,
         data: data,
-        gas: gasEstimate,
-        gasPrice: gasPrice
+        gas: gasEstimate.toString(),
+        gasPrice: gasPrice.toString()
       };
       
       const signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
       const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
       
-      return receipt.transactionHash;
+      return receipt.transactionHash.toString();
     }
   } catch (error) {
     console.error('Error processing BSC transfer:', error);

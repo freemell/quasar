@@ -242,7 +242,7 @@ export default function Dashboard() {
       if (data.success) {
         setPendingTips(prev => prev.filter(t => (t.id || t._id) !== tipId));
         // refresh history after claim
-        const addr = getSolanaAddress(user);
+        const addr = getBSCAddress(user);
         if (addr) fetchPendingAndHistory(addr);
       }
     } catch (e: any) {
@@ -782,9 +782,9 @@ export default function Dashboard() {
                   className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 outline-none font-mono text-sm"
                   disabled={withdrawing}
                 />
-                {connected && publicKey && (
+                {isConnected && address && (
                   <button
-                    onClick={() => setWithdrawAddress(publicKey.toString())}
+                    onClick={() => setWithdrawAddress(address)}
                     className="mt-2 text-xs text-[#c8b4a0] hover:text-[#e6e1d7]"
                     disabled={withdrawing}
                   >

@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Get balance
-    let balance: string;
+    let balance: bigint;
     try {
       balance = await web3.eth.getBalance(walletAddress);
     } catch (e: any) {
@@ -102,12 +102,12 @@ export async function POST(req: NextRequest) {
     
     // Convert amount to Wei (1 BNB = 10^18 Wei)
     const amountWei = web3.utils.toWei(amountNum.toString(), 'ether');
-    const balanceBN = web3.utils.toBN(balance);
-    const amountBN = web3.utils.toBN(amountWei);
+    const balanceBN = balance;
+    const amountBN = BigInt(amountWei.toString());
     
     // Get gas price and estimate gas
-    let gasPrice: string;
-    let gasEstimate: number;
+    let gasPrice: bigint;
+    let gasEstimate: bigint;
     try {
       gasPrice = await web3.eth.getGasPrice();
       gasEstimate = await web3.eth.estimateGas({
@@ -124,11 +124,11 @@ export async function POST(req: NextRequest) {
     }
     
     // Calculate total required (amount + gas)
-    const gasCost = web3.utils.toBN(gasPrice).mul(web3.utils.toBN(gasEstimate));
-    const totalRequired = amountBN.add(gasCost);
+    const gasCost = gasPrice * gasEstimate;
+    const totalRequired = amountBN + gasCost;
     
-    if (balanceBN.lt(totalRequired)) {
-      const availableBNB = parseFloat(web3.utils.fromWei(balance, 'ether'));
+    if (balanceBN < totalRequired) {
+      const availableBNB = parseFloat(web3.utils.fromWei(balance.toString(), 'ether'));
       const requestedBNB = amountNum;
       const gasCostBNB = parseFloat(web3.utils.fromWei(gasCost.toString(), 'ether'));
       return NextResponse.json({ 
@@ -144,8 +144,8 @@ export async function POST(req: NextRequest) {
         from: walletAddress,
         to: toAddress,
         value: amountWei,
-        gas: gasEstimate,
-        gasPrice: gasPrice
+        gas: gasEstimate.toString(),
+        gasPrice: gasPrice.toString()
       };
 
       // Sign transaction
@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
 
       // Send transaction
       const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
-      txHash = receipt.transactionHash;
+      txHash = receipt.transactionHash.toString();
       
     } catch (e: any) {
       const errorMsg = e?.message || String(e);
@@ -168,14 +168,27 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
 
-    // Wait for confirmation
+    // Wait for confirmation (polling approach for Web3.js v4)
     try {
-      const receipt = await web3.eth.waitForTransactionReceipt(txHash, 60000);
-      if (!receipt.status) {
-        return NextResponse.json({ 
-          error: 'Transaction failed', 
-          details: 'Transaction was reverted' 
-        }, { status: 500 });
+      let receipt = null;
+      const startTime = Date.now();
+      while (Date.now() - startTime < 60000) {
+        receipt = await web3.eth.getTransactionReceipt(txHash);
+        if (receipt) {
+          if (!receipt.status) {
+            return NextResponse.json({ 
+              error: 'Transaction failed', 
+              details: 'Transaction was reverted' 
+            }, { status: 500 });
+          }
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      if (!receipt) {
+        // Transaction might still be pending, but we have the txHash
+        // Return success with txHash so user can check on BscScan
+        console.warn('Transaction confirmation timeout, but txHash is available');
       }
     } catch (e: any) {
       console.error('Error confirming transaction:', e?.message);
@@ -190,7 +203,7 @@ export async function POST(req: NextRequest) {
         amount: amountNum,
         token: 'BNB',
         counterparty: toAddress,
-        txHash: sig,
+        txHash: txHash,
         date: new Date()
       });
       await user.save();
@@ -201,11 +214,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      txHash: sig,
+      txHash: txHash,
       amount: amountNum,
       from: user.walletAddress,
       to: toAddress,
-      bscscanUrl: `https://bscscan.com/tx/${sig}`
+      bscscanUrl: `https://bscscan.com/tx/${txHash}`
     });
 
   } catch (e: any) {

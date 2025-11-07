@@ -215,8 +215,8 @@ export async function POST(req: NextRequest) {
           // Check sender balance before attempting transfer (for total batched amount)
           const senderBalance = await web3.eth.getBalance(fromAddress);
           const amountWei = web3.utils.toWei(totalAmount.toString(), 'ether');
-          const balanceBN = web3.utils.toBN(senderBalance);
-          const amountBN = web3.utils.toBN(amountWei);
+          const balanceBN = senderBalance; // getBalance returns bigint in Web3.js v4
+          const amountBN = BigInt(amountWei.toString());
           
           // Get gas price and estimate gas
           const gasPrice = await web3.eth.getGasPrice();
@@ -227,11 +227,11 @@ export async function POST(req: NextRequest) {
           });
           
           // Calculate total required (amount + gas)
-          const gasCost = web3.utils.toBN(gasPrice).mul(web3.utils.toBN(gasEstimate));
-          const totalRequired = amountBN.add(gasCost);
+          const gasCost = gasPrice * gasEstimate;
+          const totalRequired = amountBN + gasCost;
           
-          if (balanceBN.lt(totalRequired)) {
-            const availableBNB = parseFloat(web3.utils.fromWei(senderBalance, 'ether'));
+          if (balanceBN < totalRequired) {
+            const availableBNB = parseFloat(web3.utils.fromWei(senderBalance.toString(), 'ether'));
             throw new Error(`Insufficient balance. Available: ${availableBNB.toFixed(4)} BNB, Requested: ${totalAmount} BNB (batched ${tips.length} tip(s))`);
           }
           
@@ -240,8 +240,8 @@ export async function POST(req: NextRequest) {
             from: fromAddress,
             to: recipient.walletAddress,
             value: amountWei,
-            gas: gasEstimate,
-            gasPrice: gasPrice
+            gas: gasEstimate.toString(),
+            gasPrice: gasPrice.toString()
           };
           
           console.log(`Transferring ${totalAmount} BNB (${tips.length} tip(s) batched) from ${sender.walletAddress} to ${recipient.walletAddress} (recipient handle: ${normalizedRecipientHandle})`);
@@ -249,12 +249,23 @@ export async function POST(req: NextRequest) {
           // Sign and send transaction
           const signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
           const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
-          const sig = receipt.transactionHash;
+          const sig = receipt.transactionHash.toString();
 
-          // Wait for confirmation
-          const confirmedReceipt = await web3.eth.waitForTransactionReceipt(sig, 60000);
-          if (!confirmedReceipt.status) {
-            throw new Error('Transaction was reverted');
+          // Wait for confirmation (polling approach for Web3.js v4)
+          let confirmedReceipt = null;
+          const startTime = Date.now();
+          while (Date.now() - startTime < 60000) {
+            confirmedReceipt = await web3.eth.getTransactionReceipt(sig);
+            if (confirmedReceipt) {
+              if (!confirmedReceipt.status) {
+                throw new Error('Transaction was reverted');
+              }
+              break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+          if (!confirmedReceipt) {
+            throw new Error('Transaction confirmation timeout');
           }
 
           // Record in both users' history (one entry for the batched transaction)
