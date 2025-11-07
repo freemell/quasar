@@ -16,23 +16,25 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pourboire - Tip anyone on X with Solana",
-  description: "Send instant SOL/USDC tips to any X post with @Pourboireonsol. Zero fees, instant payments, and auto-pay features powered by x402.",
+  title: "Quasar - Share Your BNB Easily on X",
+  description: "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasaronsol.",
   openGraph: {
-    title: "Pourboire - Tip anyone on X with Solana",
-    description: "Send instant SOL/USDC tips to any X post with @Pourboireonsol. Zero fees, instant payments, and auto-pay features powered by x402.",
-    url: "https://pourboire.tips/",
-    siteName: "Pourboire",
+    title: "Quasar - Share Your BNB Easily on X",
+    description: "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasaronsol.",
+    url: "https://quasar.tips/",
+    siteName: "Quasar",
     images: [],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Pourboire - Tip anyone on X with Solana",
-    description: "Send instant SOL/USDC tips to any X post with @Pourboireonsol. Zero fees, instant payments, and auto-pay features powered by x402.",
+    title: "Quasar - Share Your BNB Easily on X",
+    description: "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasaronsol.",
   },
   icons: {
-    icon: "/pour%20(1).png",
+    icon: "/quasar-icon.svg",
+    shortcut: "/quasar-icon.svg",
+    apple: "/quasar-icon.svg",
   },
 };
 
@@ -50,10 +52,10 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebSite",
-              "name": "Pourboire",
-              "description": "Send instant SOL/USDC tips to any X post with @Pourboireonsol. Zero fees, instant payments, and auto-pay features powered by x402.",
-              "url": "https://pourboire.tips/",
-              "sameAs": ["https://x.com/Pourboireonsol"]
+              "name": "Quasar",
+              "description": "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasaronsol.",
+              "url": "https://quasar.tips/",
+              "sameAs": ["https://x.com/Quasaronsol"]
             })
           }}
         />

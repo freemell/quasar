@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Keypair } from '@solana/web3.js';
+import Web3 from 'web3';
+import { ethers } from 'ethers';
 import { decryptPrivateKey } from '@/lib/crypto';
 
 // POST /api/wallet/withdraw
 // Body: { handle: string, toAddress: string, amount: number }
-// Withdraws SOL from custodial tip wallet to another address
+// Withdraws BNB from custodial tip wallet to another address
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
@@ -37,12 +38,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Database error while finding user', details: e?.message }, { status: 500 });
     }
 
-    // Validate recipient address
-    let recipientPubkey: PublicKey;
-    try {
-      recipientPubkey = new PublicKey(toAddress);
-    } catch (e: any) {
-      return NextResponse.json({ error: 'Invalid recipient address', details: e?.message }, { status: 400 });
+    // Validate recipient address (BSC address format)
+    if (!Web3.utils.isAddress(toAddress)) {
+      return NextResponse.json({ error: 'Invalid recipient address format' }, { status: 400 });
     }
 
     // Validate amount
@@ -53,16 +51,19 @@ export async function POST(req: NextRequest) {
 
     // Decrypt private key
     let privateKeyBytes: Uint8Array;
-    let walletKeypair: Keypair;
+    let privateKeyHex: string;
     try {
       if (!process.env.ENCRYPTION_KEY) {
         throw new Error('ENCRYPTION_KEY environment variable is not set');
       }
       privateKeyBytes = decryptPrivateKey(user.encryptedPrivateKey);
-      if (!privateKeyBytes || privateKeyBytes.length !== 64) {
-        throw new Error(`Invalid decrypted key length: ${privateKeyBytes?.length}, expected 64`);
+      // Convert private key bytes to hex string (BSC/Ethereum format)
+      privateKeyHex = '0x' + Buffer.from(privateKeyBytes).toString('hex');
+      
+      // Validate private key
+      if (!privateKeyHex || privateKeyHex.length !== 66) {
+        throw new Error(`Invalid decrypted key length: ${privateKeyHex?.length}, expected 66 (32 bytes + 0x prefix)`);
       }
-      walletKeypair = Keypair.fromSecretKey(privateKeyBytes);
     } catch (e: any) {
       console.error('Error decrypting private key:', e?.message);
       return NextResponse.json({ 
@@ -71,13 +72,26 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
 
+    // Initialize Web3
+    const rpcUrl = process.env.NEXT_PUBLIC_BSC_RPC_URL || 'https://bsc-dataseed.binance.org';
+    const web3 = new Web3(rpcUrl);
+
+    // Get wallet address from private key
+    const account = web3.eth.accounts.privateKeyToAccount(privateKeyHex);
+    const walletAddress = account.address;
+
+    // Verify wallet address matches
+    if (walletAddress.toLowerCase() !== user.walletAddress.toLowerCase()) {
+      return NextResponse.json({ 
+        error: 'Wallet address mismatch', 
+        details: 'Decrypted private key does not match stored wallet address' 
+      }, { status: 500 });
+    }
+
     // Get balance
-    let balance: number;
-    let conn: Connection;
+    let balance: string;
     try {
-      const rpc = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-      conn = new Connection(rpc);
-      balance = await conn.getBalance(walletKeypair.publicKey);
+      balance = await web3.eth.getBalance(walletAddress);
     } catch (e: any) {
       console.error('Error getting balance:', e?.message);
       return NextResponse.json({ 
@@ -86,98 +100,87 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
     
-    const requestedLamports = Math.floor(amountNum * LAMPORTS_PER_SOL);
+    // Convert amount to Wei (1 BNB = 10^18 Wei)
+    const amountWei = web3.utils.toWei(amountNum.toString(), 'ether');
+    const balanceBN = web3.utils.toBN(balance);
+    const amountBN = web3.utils.toBN(amountWei);
     
-    // Estimate fee (roughly 5000 lamports)
-    const estimatedFee = 5000;
-    if (balance < requestedLamports + estimatedFee) {
+    // Get gas price and estimate gas
+    let gasPrice: string;
+    let gasEstimate: number;
+    try {
+      gasPrice = await web3.eth.getGasPrice();
+      gasEstimate = await web3.eth.estimateGas({
+        from: walletAddress,
+        to: toAddress,
+        value: amountWei
+      });
+    } catch (e: any) {
+      console.error('Error estimating gas:', e?.message);
       return NextResponse.json({ 
-        error: `Insufficient balance. Available: ${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL, Requested: ${amountNum} SOL` 
+        error: 'Failed to estimate gas', 
+        details: e?.message 
+      }, { status: 500 });
+    }
+    
+    // Calculate total required (amount + gas)
+    const gasCost = web3.utils.toBN(gasPrice).mul(web3.utils.toBN(gasEstimate));
+    const totalRequired = amountBN.add(gasCost);
+    
+    if (balanceBN.lt(totalRequired)) {
+      const availableBNB = parseFloat(web3.utils.fromWei(balance, 'ether'));
+      const requestedBNB = amountNum;
+      const gasCostBNB = parseFloat(web3.utils.fromWei(gasCost.toString(), 'ether'));
+      return NextResponse.json({ 
+        error: `Insufficient balance. Available: ${availableBNB.toFixed(4)} BNB, Requested: ${requestedBNB} BNB, Estimated gas: ${gasCostBNB.toFixed(6)} BNB` 
       }, { status: 400 });
     }
 
-    // Create and send transaction with fresh blockhash
-    let sig: string;
+    // Create and send transaction
+    let txHash: string;
     try {
-      // Get fresh blockhash right before creating transaction
-      // Use 'finalized' for longer validity, but fetch right before use
-      const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('finalized');
-      
-      // Create transaction with blockhash immediately
-      const tx = new Transaction({
-        feePayer: walletKeypair.publicKey,
-        blockhash: blockhash,
-        lastValidBlockHeight: lastValidBlockHeight
-      }).add(
-        SystemProgram.transfer({
-          fromPubkey: walletKeypair.publicKey,
-          toPubkey: recipientPubkey,
-          lamports: requestedLamports
-        })
-      );
+      // Create transaction
+      const tx = {
+        from: walletAddress,
+        to: toAddress,
+        value: amountWei,
+        gas: gasEstimate,
+        gasPrice: gasPrice
+      };
 
       // Sign transaction
-      tx.sign(walletKeypair);
+      const signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
       
-      // Serialize immediately
-      const serializedTx = tx.serialize();
-      
-      // Send transaction with preflight disabled (we've already validated balance)
-      // This avoids blockhash expiry during simulation
-      sig = await conn.sendRawTransaction(serializedTx, {
-        skipPreflight: true,  // Skip simulation to avoid blockhash expiry
-        maxRetries: 5
-      });
+      if (!signedTx.rawTransaction) {
+        throw new Error('Failed to sign transaction');
+      }
+
+      // Send transaction
+      const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+      txHash = receipt.transactionHash;
       
     } catch (e: any) {
       const errorMsg = e?.message || String(e);
       console.error('Error creating/sending transaction:', errorMsg);
-      
-      // Try to get detailed error logs
-      if (typeof e?.getLogs === 'function') {
-        try {
-          const logs = await e.getLogs();
-          console.error('Transaction simulation logs:', logs);
-          return NextResponse.json({ 
-            error: 'Failed to create or send transaction', 
-            details: errorMsg,
-            logs: logs
-          }, { status: 500 });
-        } catch {}
-      }
-      
       return NextResponse.json({ 
         error: 'Failed to create or send transaction', 
         details: errorMsg
       }, { status: 500 });
     }
 
-    // Wait for confirmation with retry logic
+    // Wait for confirmation
     try {
-      const startTime = Date.now();
-      while (Date.now() - startTime < 60000) {
-        const status = await conn.getSignatureStatus(sig);
-        if (status?.value?.err) {
-          return NextResponse.json({ error: 'Transaction failed', details: status.value.err }, { status: 500 });
-        }
-        if (status?.value?.confirmationStatus === 'confirmed' || status?.value?.confirmationStatus === 'finalized') {
-          break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 1500));
-      }
-      
-      // Verify final status
-      const finalStatus = await conn.getSignatureStatus(sig);
-      if (finalStatus?.value?.err) {
-        return NextResponse.json({ error: 'Transaction failed', details: finalStatus.value.err }, { status: 500 });
+      const receipt = await web3.eth.waitForTransactionReceipt(txHash, 60000);
+      if (!receipt.status) {
+        return NextResponse.json({ 
+          error: 'Transaction failed', 
+          details: 'Transaction was reverted' 
+        }, { status: 500 });
       }
     } catch (e: any) {
       console.error('Error confirming transaction:', e?.message);
-      return NextResponse.json({ 
-        error: 'Failed to confirm transaction', 
-        details: e?.message,
-        txHash: sig 
-      }, { status: 500 });
+      // Transaction might still be pending, but we have the txHash
+      // Return success with txHash so user can check on BscScan
     }
 
     // Record in history
@@ -185,7 +188,7 @@ export async function POST(req: NextRequest) {
       user.history.push({
         type: 'transfer',
         amount: amountNum,
-        token: 'SOL',
+        token: 'BNB',
         counterparty: toAddress,
         txHash: sig,
         date: new Date()
@@ -202,7 +205,7 @@ export async function POST(req: NextRequest) {
       amount: amountNum,
       from: user.walletAddress,
       to: toAddress,
-      solscanUrl: `https://solscan.io/tx/${sig}`
+      bscscanUrl: `https://bscscan.com/tx/${sig}`
     });
 
   } catch (e: any) {

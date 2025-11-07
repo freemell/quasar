@@ -2,8 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const { TwitterApi } = require('twitter-api-v2');
-const { Connection, PublicKey, Keypair, Transaction, SystemProgram, LAMPORTS_PER_SOL } = require('@solana/web3.js');
-const { createTransfer } = require('@solana/spl-token');
+const Web3 = require('web3');
+const { ethers } = require('ethers');
 const sodium = require('libsodium-wrappers');
 const cron = require('node-cron');
 
@@ -15,11 +15,15 @@ app.use(cors());
 app.use(express.json());
 
 // MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/soltip';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/bnbtip';
 mongoose.connect(MONGODB_URI);
 
-// Solana connection
-const connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com');
+// BSC connection using Web3.js
+const BSC_RPC_URL = process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org';
+const web3 = new Web3(BSC_RPC_URL);
+
+// Also use ethers.js for better compatibility
+const provider = new ethers.JsonRpcProvider(BSC_RPC_URL);
 
 // Twitter API client
 const twitterClient = new TwitterApi({
@@ -104,14 +108,18 @@ function decryptPrivateKey(encryptedData, nonce, password) {
   return Buffer.from(decrypted);
 }
 
-// Create custodial wallet for user
+// Create custodial wallet for user (BSC/Ethereum compatible)
 async function createCustodialWallet(twitterHandle) {
-  const keypair = Keypair.generate();
-  const walletAddress = keypair.publicKey.toString();
+  // Generate a new BSC wallet using ethers.js
+  const wallet = ethers.Wallet.createRandom();
+  const walletAddress = wallet.address;
+  const privateKey = wallet.privateKey;
   
   // Encrypt private key
   const password = process.env.ENCRYPTION_PASSWORD || 'default-password';
-  const { encrypted, nonce } = encryptPrivateKey(keypair.secretKey, password);
+  // Convert private key to buffer for encryption
+  const privateKeyBuffer = Buffer.from(privateKey.slice(2), 'hex'); // Remove '0x' prefix
+  const { encrypted, nonce } = encryptPrivateKey(privateKeyBuffer, password);
   
   // Store in database
   const user = new User({
@@ -136,34 +144,148 @@ async function getUserById(twitterId) {
   return await User.findOne({ twitterId });
 }
 
-// Send SOL transaction
-async function sendSOL(fromPrivateKey, toAddress, amount) {
-  const fromKeypair = Keypair.fromSecretKey(fromPrivateKey);
-  const toPublicKey = new PublicKey(toAddress);
-  
-  const transaction = new Transaction().add(
-    SystemProgram.transfer({
-      fromPubkey: fromKeypair.publicKey,
-      toPubkey: toPublicKey,
-      lamports: amount * LAMPORTS_PER_SOL,
-    })
-  );
-  
-  const signature = await connection.sendTransaction(transaction, [fromKeypair]);
-  await connection.confirmTransaction(signature);
-  
-  return signature;
+// Send BNB transaction using Web3.js for BSC
+async function sendBNB(fromPrivateKey, toAddress, amount) {
+  try {
+    // Convert private key buffer to hex string if needed
+    let privateKeyHex;
+    if (Buffer.isBuffer(fromPrivateKey)) {
+      privateKeyHex = '0x' + fromPrivateKey.toString('hex');
+    } else if (typeof fromPrivateKey === 'string') {
+      privateKeyHex = fromPrivateKey.startsWith('0x') ? fromPrivateKey : '0x' + fromPrivateKey;
+    } else {
+      throw new Error('Invalid private key format');
+    }
+
+    // Create account from private key
+    const account = web3.eth.accounts.privateKeyToAccount(privateKeyHex);
+    const fromAddress = account.address;
+
+    // Convert amount from BNB to Wei (1 BNB = 10^18 Wei)
+    const amountWei = web3.utils.toWei(amount.toString(), 'ether');
+
+    // Get gas price
+    const gasPrice = await web3.eth.getGasPrice();
+    
+    // Estimate gas
+    const gasEstimate = await web3.eth.estimateGas({
+      from: fromAddress,
+      to: toAddress,
+      value: amountWei
+    });
+
+    // Create transaction
+    const tx = {
+      from: fromAddress,
+      to: toAddress,
+      value: amountWei,
+      gas: gasEstimate,
+      gasPrice: gasPrice
+    };
+
+    // Sign transaction
+    const signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
+
+    // Send transaction
+    const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+
+    return receipt.transactionHash;
+  } catch (error) {
+    console.error('Error sending BNB transaction:', error);
+    throw error;
+  }
+}
+
+// Send BEP-20 token (USDC, USDT, etc.) transaction
+async function sendToken(fromPrivateKey, toAddress, amount, tokenContractAddress) {
+  try {
+    // Convert private key
+    let privateKeyHex;
+    if (Buffer.isBuffer(fromPrivateKey)) {
+      privateKeyHex = '0x' + fromPrivateKey.toString('hex');
+    } else if (typeof fromPrivateKey === 'string') {
+      privateKeyHex = fromPrivateKey.startsWith('0x') ? fromPrivateKey : '0x' + fromPrivateKey;
+    } else {
+      throw new Error('Invalid private key format');
+    }
+
+    const account = web3.eth.accounts.privateKeyToAccount(privateKeyHex);
+    const fromAddress = account.address;
+
+    // Standard ERC-20 ABI for transfer function
+    const tokenAbi = [
+      {
+        constant: false,
+        inputs: [
+          { name: '_to', type: 'address' },
+          { name: '_value', type: 'uint256' }
+        ],
+        name: 'transfer',
+        outputs: [{ name: '', type: 'bool' }],
+        type: 'function'
+      },
+      {
+        constant: true,
+        inputs: [{ name: '_owner', type: 'address' }],
+        name: 'balanceOf',
+        outputs: [{ name: 'balance', type: 'uint256' }],
+        type: 'function'
+      },
+      {
+        constant: true,
+        inputs: [],
+        name: 'decimals',
+        outputs: [{ name: '', type: 'uint8' }],
+        type: 'function'
+      }
+    ];
+
+    const tokenContract = new web3.eth.Contract(tokenAbi, tokenContractAddress);
+    
+    // Get token decimals
+    const decimals = await tokenContract.methods.decimals().call();
+    const amountWei = web3.utils.toBN(amount).mul(web3.utils.toBN(10).pow(web3.utils.toBN(decimals)));
+
+    // Encode transfer function call
+    const data = tokenContract.methods.transfer(toAddress, amountWei.toString()).encodeABI();
+
+    // Get gas price and estimate gas
+    const gasPrice = await web3.eth.getGasPrice();
+    const gasEstimate = await web3.eth.estimateGas({
+      from: fromAddress,
+      to: tokenContractAddress,
+      data: data
+    });
+
+    // Create transaction
+    const tx = {
+      from: fromAddress,
+      to: tokenContractAddress,
+      data: data,
+      gas: gasEstimate,
+      gasPrice: gasPrice
+    };
+
+    // Sign and send transaction
+    const signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
+    const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+
+    return receipt.transactionHash;
+  } catch (error) {
+    console.error('Error sending token transaction:', error);
+    throw error;
+  }
 }
 
 // Parse tip command from tweet text
 function parseTipCommand(text) {
-  const tipRegex = /@pourboireonsol\s+tip\s+(\d+(?:\.\d+)?)\s*(SOL|USDC)?/i;
+  const tipRegex = /@quasaronsol\s+tip\s+(\d+(?:\.\d+)?)\s*(BNB|USDC)?/i;
   const match = text.match(tipRegex);
   
   if (match) {
     return {
       amount: parseFloat(match[1]),
-      token: match[2] || 'SOL'
+      token: match[2] || 'BNB'
     };
   }
   
@@ -178,7 +300,7 @@ function parseAutoPayCommand(text) {
 
 // Parse giveaway command
 function parseGiveawayCommand(text) {
-  const giveawayRegex = /@pourboireonsol\s+pick\s+(random|first|highest)\s+(\d+)\s+replies?\s+and\s+tip\s+(\d+(?:\.\d+)?)\s*(SOL|USDC)?/i;
+  const giveawayRegex = /@quasaronsol\s+pick\s+(random|first|highest)\s+(\d+)\s+replies?\s+and\s+tip\s+(\d+(?:\.\d+)?)\s*(BNB|USDC)?/i;
   const match = text.match(giveawayRegex);
   
   if (match) {
@@ -186,7 +308,7 @@ function parseGiveawayCommand(text) {
       type: match[1],
       count: parseInt(match[2]),
       amount: parseFloat(match[3]),
-      token: match[4] || 'SOL'
+      token: match[4] || 'BNB'
     };
   }
   
@@ -229,8 +351,24 @@ async function processTipCommand(tweet, senderHandle, recipientHandle) {
     const password = process.env.ENCRYPTION_PASSWORD || 'default-password';
     const privateKey = decryptPrivateKey(sender.encryptedPrivateKey, sender.nonce, password);
     
-    // Send transaction
-    const txHash = await sendSOL(privateKey, recipient.walletAddress, tipCommand.amount);
+    // Send transaction (BNB or BEP-20 token)
+    let txHash;
+    if (tipCommand.token === 'BNB') {
+      txHash = await sendBNB(privateKey, recipient.walletAddress, tipCommand.amount);
+    } else {
+      // For USDC/USDT, use token contract addresses
+      // USDC on BSC: 0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d
+      // USDT on BSC: 0x55d398326f99059fF775485246999027B3197955
+      const tokenAddresses = {
+        'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+        'USDT': '0x55d398326f99059fF775485246999027B3197955'
+      };
+      const tokenAddress = tokenAddresses[tipCommand.token];
+      if (!tokenAddress) {
+        throw new Error(`Unsupported token: ${tipCommand.token}`);
+      }
+      txHash = await sendToken(privateKey, recipient.walletAddress, tipCommand.amount, tokenAddress);
+    }
     
     // Save transaction record
     const transaction = new Transaction({
@@ -336,8 +474,21 @@ async function processGiveawayCommand(tweet, senderHandle) {
           winnerUserRecord = user;
         }
         
-        // Send tip
-        const txHash = await sendSOL(privateKey, winnerUserRecord.walletAddress, giveawayCommand.amount);
+        // Send tip (BNB or BEP-20 token)
+        let txHash;
+        if (giveawayCommand.token === 'BNB') {
+          txHash = await sendBNB(privateKey, winnerUserRecord.walletAddress, giveawayCommand.amount);
+        } else {
+          const tokenAddresses = {
+            'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+            'USDT': '0x55d398326f99059fF775485246999027B3197955'
+          };
+          const tokenAddress = tokenAddresses[giveawayCommand.token];
+          if (!tokenAddress) {
+            throw new Error(`Unsupported token: ${giveawayCommand.token}`);
+          }
+          txHash = await sendToken(privateKey, winnerUserRecord.walletAddress, giveawayCommand.amount, tokenAddress);
+        }
         txHashes.push(txHash);
         
         // Save transaction
@@ -380,7 +531,7 @@ async function monitorMentions() {
     console.log('Monitoring Twitter mentions...');
     
     const mentions = await twitterClient.v2.search({
-      query: '@pourboireonsol -is:retweet',
+      query: '@quasaronsol -is:retweet',
       max_results: 10,
       'tweet.fields': ['author_id', 'conversation_id', 'text', 'created_at'],
       'user.fields': ['username']
@@ -403,7 +554,7 @@ async function monitorMentions() {
           const recipientMatch = tweet.text.match(/@(\w+)/g);
           if (recipientMatch && recipientMatch.length > 1) {
             const recipientHandle = recipientMatch[1].replace('@', '');
-            if (recipientHandle.toLowerCase() !== 'pourboireonsol') {
+            if (recipientHandle.toLowerCase() !== 'quasaronsol') {
               await processTipCommand(tweet, authorHandle, recipientHandle);
             }
           }
@@ -494,7 +645,7 @@ app.post('/api/auto-pay', async (req, res) => {
 cron.schedule('*/2 * * * *', monitorMentions); // Every 2 minutes
 
 app.listen(PORT, () => {
-  console.log(`Pourboire server running on port ${PORT}`);
+  console.log(`Quasar server running on port ${PORT}`);
   console.log(`Monitoring Twitter mentions every 2 minutes...`);
 });
 

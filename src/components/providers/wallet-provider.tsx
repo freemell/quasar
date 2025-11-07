@@ -1,49 +1,64 @@
 'use client';
 
-import { FC, ReactNode, useMemo } from 'react';
-import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from '@solana/wallet-adapter-react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import '@solana/wallet-adapter-react-ui/styles.css';
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-} from '@solana/wallet-adapter-wallets';
+import { FC, ReactNode } from 'react';
+import { WagmiProvider, createConfig, http } from 'wagmi';
+import { bsc, bscTestnet } from 'wagmi/chains';
+import { injected, metaMask, walletConnect } from 'wagmi/connectors';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createWeb3Modal } from '@web3modal/wagmi/react';
 
-// Note: CSS styles are handled globally in the app
+// BSC Mainnet Chain ID: 56
+// BSC Testnet Chain ID: 97
+const chains = [bsc, bscTestnet] as const;
+
+// Get RPC URL from environment
+const rpcUrl = process.env.NEXT_PUBLIC_BSC_RPC_URL || 'https://bsc-dataseed.binance.org';
+
+// Create wagmi config
+const config = createConfig({
+  chains,
+  connectors: [
+    injected(),
+    metaMask(),
+    walletConnect({ 
+      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
+      showQrModal: true
+    }),
+  ],
+  transports: {
+    [bsc.id]: http(rpcUrl),
+    [bscTestnet.id]: http('https://data-seed-prebsc-1-s1.binance.org:8545'),
+  },
+});
+
+// Create Web3Modal
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '';
+if (projectId) {
+  createWeb3Modal({
+    wagmiConfig: config,
+    projectId,
+    chains,
+    themeMode: 'dark',
+    themeVariables: {
+      '--w3m-color-mix': '#6b5545',
+      '--w3m-color-mix-strength': 20,
+    },
+  });
+}
+
+// Create React Query client
+const queryClient = new QueryClient();
 
 interface WalletProviderProps {
   children: ReactNode;
 }
 
 export const WalletProvider: FC<WalletProviderProps> = ({ children }) => {
-  // Prefer env-configured RPC and network
-  const envRpc = process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
-  const envNet = (process.env.NEXT_PUBLIC_SOLANA_NETWORK_NAME || 'devnet').toLowerCase();
-  const network = envNet.includes('main') ? WalletAdapterNetwork.Mainnet : envNet.includes('test') ? WalletAdapterNetwork.Testnet : WalletAdapterNetwork.Devnet;
-
-  const endpoint = useMemo(() => {
-    if (envRpc) return envRpc;
-    if (network === WalletAdapterNetwork.Mainnet) return 'https://api.mainnet-beta.solana.com';
-    if (network === WalletAdapterNetwork.Testnet) return 'https://api.testnet.solana.com';
-    return 'https://api.devnet.solana.com';
-  }, [envRpc, network]);
-
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-    ],
-    []
-  );
-
   return (
-    <ConnectionProvider endpoint={endpoint}>
-      <SolanaWalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          {children}
-        </WalletModalProvider>
-      </SolanaWalletProvider>
-    </ConnectionProvider>
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 };

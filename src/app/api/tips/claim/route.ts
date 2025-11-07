@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Keypair } from '@solana/web3.js';
 import connectDB from '@/lib/mongodb';
 import User, { IPendingClaim } from '@/models/User';
-import { decryptPrivateKey } from '@/lib/crypto';
 import { postTweet } from '@/lib/twitter';
 
 export async function POST(request: NextRequest) {
@@ -52,7 +50,7 @@ export async function POST(request: NextRequest) {
     user.history.push({
       type: 'tip',
       amount: pendingClaim.amount,
-      token: pendingClaim.token as 'SOL' | 'USDC',
+      token: pendingClaim.token as 'BNB' | 'USDC',
       counterparty: pendingClaim.sender,
       txHash: pendingClaim.fromTx || `claimed_${Date.now()}`,
       date: new Date()
@@ -68,7 +66,7 @@ export async function POST(request: NextRequest) {
     try {
       if (pendingClaim.fromTx && !pendingClaim.fromTx.startsWith('https://')) {
         // If fromTx is a tweet ID (not a URL), reply to it
-        const replyId = await postTweet(`@${username} has claimed their tip after signing up on pourboire.tips`, pendingClaim.fromTx);
+        const replyId = await postTweet(`@${username} has claimed their tip after signing up on quasar.tips`, pendingClaim.fromTx);
         if (!replyId) {
           console.error(`Failed to post claim tweet reply to ${pendingClaim.fromTx}`);
         }

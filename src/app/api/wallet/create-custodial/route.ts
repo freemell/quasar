@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Keypair } from '@solana/web3.js';
+import { ethers } from 'ethers';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
 import { encryptPrivateKey } from '@/lib/crypto';
@@ -17,13 +17,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate new Solana keypair
-    const keypair = Keypair.generate();
-    const publicKey = keypair.publicKey.toString();
-    const privateKey = keypair.secretKey;
+    // Generate new BSC wallet using ethers.js
+    const wallet = ethers.Wallet.createRandom();
+    const publicKey = wallet.address; // BSC/Ethereum address
+    const privateKey = wallet.privateKey; // Private key as hex string
 
+    // Convert private key to buffer for encryption
+    const privateKeyBuffer = Buffer.from(privateKey.slice(2), 'hex'); // Remove '0x' prefix
+    
     // Encrypt the private key
-    const encryptedPrivateKey = encryptPrivateKey(privateKey);
+    const encryptedPrivateKey = encryptPrivateKey(privateKeyBuffer);
 
     // Check if user already exists
     let user = await User.findOne({ twitterId });

@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import Web3 from 'web3';
+import { ethers } from 'ethers';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
 import { shouldUseX402, x402Server } from '@/lib/x402';
 import { postTweet } from '@/lib/twitter';
+import { decryptPrivateKey } from '@/lib/crypto';
 
-const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.devnet.solana.com');
+const BSC_RPC_URL = process.env.NEXT_PUBLIC_BSC_RPC_URL || 'https://bsc-dataseed.binance.org';
+const web3 = new Web3(BSC_RPC_URL);
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,21 +69,21 @@ export async function POST(request: NextRequest) {
         NextResponse,
         {
           amount: amount,
-          currency: token === 'SOL' ? 'USDC' : token, // Convert SOL tips to USDC for x402
+          currency: token === 'BNB' ? 'USDC' : token, // Convert BNB tips to USDC for x402
           facilitator: 'coinbase',
           description: `Tip from ${senderHandle} to ${recipientHandle}`
         }
       );
     }
 
-    // Process regular Solana transfer
-    const txHash = await processSolanaTransfer(sender, recipient, amount, token);
+    // Process regular BSC transfer
+    const txHash = await processBSCTransfer(sender, recipient, amount, token);
 
     // Add to both users' transaction history
     const transaction = {
       type: 'tip' as const,
       amount: amount,
-      token: token as 'SOL' | 'USDC',
+      token: token as 'BNB' | 'USDC',
       counterparty: recipientHandle,
       txHash: txHash,
       date: new Date()
@@ -122,20 +125,110 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processSolanaTransfer(sender: any, recipient: any, amount: number, token: string): Promise<string> {
-  // Mock transaction processing
-  // In a real implementation, you would:
-  // 1. Create a transaction
-  // 2. Sign it with the sender's wallet
-  // 3. Send it to the Solana network
-  // 4. Return the transaction hash
-  
-  const mockTxHash = `sol_tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
-  // Simulate processing delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  return mockTxHash;
+async function processBSCTransfer(sender: any, recipient: any, amount: number, token: string): Promise<string> {
+  try {
+    // Decrypt sender's private key
+    if (!process.env.ENCRYPTION_KEY) {
+      throw new Error('ENCRYPTION_KEY environment variable is not set');
+    }
+    
+    const privateKeyBytes = decryptPrivateKey(sender.encryptedPrivateKey);
+    const privateKeyHex = '0x' + Buffer.from(privateKeyBytes).toString('hex');
+    
+    // Create account from private key
+    const account = web3.eth.accounts.privateKeyToAccount(privateKeyHex);
+    const fromAddress = account.address;
+    
+    // Verify sender address matches
+    if (fromAddress.toLowerCase() !== sender.walletAddress.toLowerCase()) {
+      throw new Error('Sender wallet address mismatch');
+    }
+    
+    if (token === 'BNB') {
+      // Send native BNB
+      const amountWei = web3.utils.toWei(amount.toString(), 'ether');
+      const gasPrice = await web3.eth.getGasPrice();
+      const gasEstimate = await web3.eth.estimateGas({
+        from: fromAddress,
+        to: recipient.walletAddress,
+        value: amountWei
+      });
+      
+      const tx = {
+        from: fromAddress,
+        to: recipient.walletAddress,
+        value: amountWei,
+        gas: gasEstimate,
+        gasPrice: gasPrice
+      };
+      
+      const signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
+      const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+      
+      return receipt.transactionHash;
+    } else {
+      // Send BEP-20 token (USDC, USDT, etc.)
+      const tokenAddresses: { [key: string]: string } = {
+        'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+        'USDT': '0x55d398326f99059fF775485246999027B3197955'
+      };
+      
+      const tokenAddress = tokenAddresses[token];
+      if (!tokenAddress) {
+        throw new Error(`Unsupported token: ${token}`);
+      }
+      
+      // ERC-20 ABI for transfer
+      const tokenAbi = [
+        {
+          constant: false,
+          inputs: [
+            { name: '_to', type: 'address' },
+            { name: '_value', type: 'uint256' }
+          ],
+          name: 'transfer',
+          outputs: [{ name: '', type: 'bool' }],
+          type: 'function'
+        },
+        {
+          constant: true,
+          inputs: [],
+          name: 'decimals',
+          outputs: [{ name: '', type: 'uint8' }],
+          type: 'function'
+        }
+      ];
+      
+      const tokenContract = new web3.eth.Contract(tokenAbi, tokenAddress);
+      const decimals = await tokenContract.methods.decimals().call();
+      const amountWei = web3.utils.toBN(amount).mul(web3.utils.toBN(10).pow(web3.utils.toBN(decimals)));
+      
+      const data = tokenContract.methods.transfer(recipient.walletAddress, amountWei.toString()).encodeABI();
+      
+      const gasPrice = await web3.eth.getGasPrice();
+      const gasEstimate = await web3.eth.estimateGas({
+        from: fromAddress,
+        to: tokenAddress,
+        data: data
+      });
+      
+      const tx = {
+        from: fromAddress,
+        to: tokenAddress,
+        data: data,
+        gas: gasEstimate,
+        gasPrice: gasPrice
+      };
+      
+      const signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
+      const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+      
+      return receipt.transactionHash;
+    }
+  } catch (error) {
+    console.error('Error processing BSC transfer:', error);
+    throw error;
+  }
 }
 
 

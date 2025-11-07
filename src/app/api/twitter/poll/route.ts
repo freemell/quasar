@@ -2,44 +2,46 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
 import { searchMentions, postTweet } from '@/lib/twitter';
-import { Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import Web3 from 'web3';
 import { decryptPrivateKey } from '@/lib/crypto';
 
-const BOT_HANDLE = '@Pourboireonsol';
+const BOT_HANDLE = '@Quasaronsol';
+const BSC_RPC_URL = process.env.NEXT_PUBLIC_BSC_RPC_URL || 'https://bsc-dataseed.binance.org';
+const web3 = new Web3(BSC_RPC_URL);
 
-function parseTip(text: string): { amount: number; token: 'SOL'|'USDC'; recipientHandle: string } | null {
+function parseTip(text: string): { amount: number; token: 'BNB'|'USDC'; recipientHandle: string } | null {
   // More flexible parsing - handles formats like:
-  // "@Pourboireonsol tip 0.01 sol @username"
-  // "@Pourboireonsol tip 0.01 @username"
-  // "@Pourboireonsol tip 0.01SOL @username"
-  // "@Pourboireonsol tip @username 0.01 sol"
+  // "@Quasaronsol tip 0.01 bnb @username"
+  // "@Quasaronsol tip 0.01 @username"
+  // "@Quasaronsol tip 0.01BNB @username"
+  // "@Quasaronsol tip @username 0.01 bnb"
   
   // First try: standard format with token before recipient
-  let re = /@pourboireonsol\s+tip\s+(\d+(?:\.\d+)?)\s*(sol|usdc)?\s+@([a-z0-9_]+)/i;
+  let re = /@quasaronsol\s+tip\s+(\d+(?:\.\d+)?)\s*(bnb|usdc)?\s+@([a-z0-9_]+)/i;
   let m = text.match(re);
   if (m) {
     const amount = Number(m[1]);
-    const token = (m[2]?.toUpperCase() as 'SOL'|'USDC') || 'SOL';
+    const token = (m[2]?.toUpperCase() as 'BNB'|'USDC') || 'BNB';
     const recipientHandle = `@${m[3]}`;
     return { amount, token, recipientHandle };
   }
   
   // Second try: format with recipient before amount
-  re = /@pourboireonsol\s+tip\s+@([a-z0-9_]+)\s+(\d+(?:\.\d+)?)\s*(sol|usdc)?/i;
+  re = /@quasaronsol\s+tip\s+@([a-z0-9_]+)\s+(\d+(?:\.\d+)?)\s*(bnb|usdc)?/i;
   m = text.match(re);
   if (m) {
     const amount = Number(m[2]);
-    const token = (m[3]?.toUpperCase() as 'SOL'|'USDC') || 'SOL';
+    const token = (m[3]?.toUpperCase() as 'BNB'|'USDC') || 'BNB';
     const recipientHandle = `@${m[1]}`;
     return { amount, token, recipientHandle };
   }
   
-  // Third try: amount without explicit token (default to SOL), recipient anywhere
-  re = /@pourboireonsol\s+tip\s+(\d+(?:\.\d+)?)\s+@([a-z0-9_]+)/i;
+  // Third try: amount without explicit token (default to BNB), recipient anywhere
+  re = /@quasaronsol\s+tip\s+(\d+(?:\.\d+)?)\s+@([a-z0-9_]+)/i;
   m = text.match(re);
   if (m) {
     const amount = Number(m[1]);
-    const token = 'SOL';
+    const token = 'BNB';
     const recipientHandle = `@${m[2]}`;
     return { amount, token, recipientHandle };
   }
@@ -58,8 +60,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, processed: 0, message: 'No new mentions found' });
       }
 
-    const rpc = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-    const conn = new Connection(rpc);
+    // BSC connection is already initialized above
 
     // Batch tips by sender-to-recipient pairs to combine multiple tips into single transactions
     type BatchedTip = {
@@ -168,7 +169,7 @@ export async function POST(req: NextRequest) {
 
       // Only create wallet for non-existing users (don't create new wallet for existing users)
       if (!recipient || !recipient.walletAddress || !recipient.encryptedPrivateKey) {
-        // Non-existing user - create wallet for them so we can send SOL
+        // Non-existing user - create wallet for them so we can send BNB
         const base = process.env.NEXT_PUBLIC_BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
         try {
           const createRes = await fetch(`${base}/api/wallet/create-custodial`, {
@@ -196,63 +197,64 @@ export async function POST(req: NextRequest) {
       // Always attempt transfer if sender is registered and recipient has wallet
       // If sender is not registered, we can't transfer yet (no sender wallet)
       // But we still generate recipient wallet and record pending claim
-      if (senderIsRegistered && recipient && recipient.walletAddress && token === 'SOL') {
+      if (senderIsRegistered && recipient && recipient.walletAddress && token === 'BNB') {
         try {
           // Decrypt sender's private key
-          const sk = decryptPrivateKey(sender.encryptedPrivateKey!);
-          const kp = Keypair.fromSecretKey(sk);
+          const privateKeyBytes = decryptPrivateKey(sender.encryptedPrivateKey!);
+          const privateKeyHex = '0x' + Buffer.from(privateKeyBytes).toString('hex');
+          
+          // Create account from private key
+          const account = web3.eth.accounts.privateKeyToAccount(privateKeyHex);
+          const fromAddress = account.address;
+          
+          // Verify sender address matches
+          if (fromAddress.toLowerCase() !== sender.walletAddress.toLowerCase()) {
+            throw new Error('Sender wallet address mismatch');
+          }
           
           // Check sender balance before attempting transfer (for total batched amount)
-          const senderBalance = await conn.getBalance(kp.publicKey);
-          const requestedLamports = Math.floor(totalAmount * LAMPORTS_PER_SOL);
-          const estimatedFee = 5000; // Rough estimate for transaction fee (single transaction for all batched tips)
+          const senderBalance = await web3.eth.getBalance(fromAddress);
+          const amountWei = web3.utils.toWei(totalAmount.toString(), 'ether');
+          const balanceBN = web3.utils.toBN(senderBalance);
+          const amountBN = web3.utils.toBN(amountWei);
           
-          if (senderBalance < requestedLamports + estimatedFee) {
-            throw new Error(`Insufficient balance. Available: ${(senderBalance / LAMPORTS_PER_SOL).toFixed(4)} SOL, Requested: ${totalAmount} SOL (batched ${tips.length} tip(s))`);
+          // Get gas price and estimate gas
+          const gasPrice = await web3.eth.getGasPrice();
+          const gasEstimate = await web3.eth.estimateGas({
+            from: fromAddress,
+            to: recipient.walletAddress,
+            value: amountWei
+          });
+          
+          // Calculate total required (amount + gas)
+          const gasCost = web3.utils.toBN(gasPrice).mul(web3.utils.toBN(gasEstimate));
+          const totalRequired = amountBN.add(gasCost);
+          
+          if (balanceBN.lt(totalRequired)) {
+            const availableBNB = parseFloat(web3.utils.fromWei(senderBalance, 'ether'));
+            throw new Error(`Insufficient balance. Available: ${availableBNB.toFixed(4)} BNB, Requested: ${totalAmount} BNB (batched ${tips.length} tip(s))`);
           }
-          
-          // Get recent blockhash
-          const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
           
           // Create single transaction for all batched tips (one transfer with total amount)
-          const tx = new Transaction({
-            feePayer: kp.publicKey,
-            blockhash,
-            lastValidBlockHeight
-          }).add(
-            SystemProgram.transfer({
-              fromPubkey: kp.publicKey,
-              toPubkey: new PublicKey(recipient.walletAddress), // Always uses the same custodial wallet
-              lamports: requestedLamports // Total amount for all batched tips
-            })
-          );
+          const tx = {
+            from: fromAddress,
+            to: recipient.walletAddress,
+            value: amountWei,
+            gas: gasEstimate,
+            gasPrice: gasPrice
+          };
           
-          console.log(`Transferring ${totalAmount} SOL (${tips.length} tip(s) batched) from ${sender.walletAddress} to ${recipient.walletAddress} (recipient handle: ${normalizedRecipientHandle})`);
+          console.log(`Transferring ${totalAmount} BNB (${tips.length} tip(s) batched) from ${sender.walletAddress} to ${recipient.walletAddress} (recipient handle: ${normalizedRecipientHandle})`);
 
-          // Sign and send with skipPreflight to avoid blockhash expiry
-          tx.sign(kp);
-          const sig = await conn.sendRawTransaction(tx.serialize(), {
-            skipPreflight: true,  // Skip preflight since we've validated balance
-            maxRetries: 3
-          });
+          // Sign and send transaction
+          const signedTx = await web3.eth.accounts.signTransaction(tx, privateKeyHex);
+          const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+          const sig = receipt.transactionHash;
 
           // Wait for confirmation
-          let confirmed = false;
-          const startTime = Date.now();
-          while (Date.now() - startTime < 60000) {
-            const status = await conn.getSignatureStatus(sig);
-            if (status?.value?.err) {
-              throw new Error(`Transaction failed: ${JSON.stringify(status.value.err)}`);
-            }
-            if (status?.value?.confirmationStatus === 'confirmed' || status?.value?.confirmationStatus === 'finalized') {
-              confirmed = true;
-              break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 1500));
-          }
-
-          if (!confirmed) {
-            throw new Error('Transaction confirmation timeout');
+          const confirmedReceipt = await web3.eth.waitForTransactionReceipt(sig, 60000);
+          if (!confirmedReceipt.status) {
+            throw new Error('Transaction was reverted');
           }
 
           // Record in both users' history (one entry for the batched transaction)
@@ -282,14 +284,14 @@ export async function POST(req: NextRequest) {
           await sender.save();
           await recipient.save();
 
-          // Post success message with Solscan link - transfer succeeded
-          // Recipient wallet was generated and SOL was transferred immediately (even if recipient hasn't signed up yet)
-          // When recipient signs up, they'll see the SOL already in their wallet
-          // Format: "@recipient pay from @sender A X SOL tip(s) have been sent to your wallet! You will see it when you create an account on pourboire.tips. Tx: https://solscan.io/tx/..."
-          const tipText = tips.length === 1 
-            ? `A ${totalAmount} ${token} tip has been sent to your wallet!`
-            : `${tips.length} tips totaling ${totalAmount} ${token} have been sent to your wallet!`;
-          const replyText = `@${recipientUsername} pay from @${senderUsername} ${tipText} You will see it when you create an account on pourboire.tips. Tx: https://solscan.io/tx/${sig}`;
+      // Post success message with BscScan link - transfer succeeded
+      // Recipient wallet was generated and BNB was transferred immediately (even if recipient hasn't signed up yet)
+      // When recipient signs up, they'll see the BNB already in their wallet
+      // Format: "@recipient pay from @sender A X BNB tip(s) have been sent to your wallet! You will see it when you create an account on quasar.tips. Tx: https://bscscan.com/tx/..."
+      const tipText = tips.length === 1 
+        ? `A ${totalAmount} ${token} tip has been sent to your wallet!`
+        : `${tips.length} tips totaling ${totalAmount} ${token} have been sent to your wallet!`;
+      const replyText = `@${recipientUsername} pay from @${senderUsername} ${tipText} You will see it when you create an account on quasar.tips. Tx: https://bscscan.com/tx/${sig}`;
           const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
           if (!replyId) {
             console.error(`Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
@@ -297,7 +299,7 @@ export async function POST(req: NextRequest) {
           
         } catch (e: any) {
           console.error('Failed to send batched tip on-chain:', e);
-          // Transfer failed - record all tips as pending claims, no Solscan link yet
+          // Transfer failed - record all tips as pending claims, no BscScan link yet
           if (recipient) {
             for (const tip of tips) {
               const existingClaim = recipient.pendingClaims.find(
@@ -314,7 +316,7 @@ export async function POST(req: NextRequest) {
             }
             await recipient.save();
           }
-          const message = `@${recipientUsername} pay from @${senderUsername} ${tips.length === 1 ? `A ${totalAmount} ${token} tip` : `${tips.length} tips totaling ${totalAmount} ${token}`} ${tips.length === 1 ? 'has' : 'have'} been recorded for you! Claim ${tips.length === 1 ? 'it' : 'them'} to receive the Solscan link:`;
+          const message = `@${recipientUsername} pay from @${senderUsername} ${tips.length === 1 ? `A ${totalAmount} ${token} tip` : `${tips.length} tips totaling ${totalAmount} ${token}`} ${tips.length === 1 ? 'has' : 'have'} been recorded for you! Claim ${tips.length === 1 ? 'it' : 'them'} to receive the BscScan link:`;
           const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
           if (!replyId) {
             console.error(`Failed to post reply to tweet ${t.id} (transfer failed). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
@@ -322,7 +324,7 @@ export async function POST(req: NextRequest) {
         }
       } else {
         // Sender not registered - can't transfer yet (no sender wallet)
-        // Sender needs to sign up on pourboire.tips first to create a custodial wallet
+        // Sender needs to sign up on quasar.tips first to create a custodial wallet
         // Generate recipient wallet and record pending claims for all tips
         // When sender signs up and funds their wallet, they can claim and send the tips
         console.log(`Sender ${normalizedSenderHandle} not registered - recording ${tips.length} pending claim(s)`);
@@ -342,9 +344,9 @@ export async function POST(req: NextRequest) {
           }
           await recipient.save();
         }
-        // Format: "@recipient pay from @sender A X SOL tip has been recorded for you! Claim it to receive the Solscan link:"
-        // Note: Sender must sign up on pourboire.tips first to fund their wallet before the tip can be sent
-        const message = `@${recipientUsername} pay from @${senderUsername} ${tips.length === 1 ? `A ${totalAmount} ${token} tip` : `${tips.length} tips totaling ${totalAmount} ${token}`} ${tips.length === 1 ? 'has' : 'have'} been recorded for you! The sender needs to sign up on pourboire.tips first. Claim ${tips.length === 1 ? 'it' : 'them'} to receive the Solscan link:`;
+        // Format: "@recipient pay from @sender A X BNB tip has been recorded for you! Claim it to receive the BscScan link:"
+        // Note: Sender must sign up on quasar.tips first to fund their wallet before the tip can be sent
+        const message = `@${recipientUsername} pay from @${senderUsername} ${tips.length === 1 ? `A ${totalAmount} ${token} tip` : `${tips.length} tips totaling ${totalAmount} ${token}`} ${tips.length === 1 ? 'has' : 'have'} been recorded for you! The sender needs to sign up on quasar.tips first. Claim ${tips.length === 1 ? 'it' : 'them'} to receive the BscScan link:`;
         const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
         if (!replyId) {
           console.error(`Failed to post reply to tweet ${t.id} (sender not registered). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);

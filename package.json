@@ -1,5 +1,5 @@
 {
-  "name": "pourboire",
+  "name": "quasar",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,25 +9,15 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@web3auth/base": "^8.12.4",
-    "@web3auth/modal": "^8.12.4",
-    "@web3auth/openlogin-adapter": "^8.12.4",
-    "@web3auth/solana-provider": "^8.12.4",
     "@gsap/react": "^2.1.2",
-    "@jup-ag/api": "^6.0.45",
     "@privy-io/react-auth": "^3.4.1",
     "@privy-io/server-auth": "^1.32.5",
     "@react-three/drei": "^10.7.6",
     "@react-three/fiber": "^9.4.0",
-    "@solana/spl-token": "^0.4.14",
-    "@solana/wallet-adapter-backpack": "^0.1.14",
-    "@solana/wallet-adapter-base": "^0.9.27",
-    "@solana/wallet-adapter-phantom": "^0.9.28",
-    "@solana/wallet-adapter-react": "^0.15.39",
-    "@solana/wallet-adapter-react-ui": "^0.9.39",
-    "@solana/wallet-adapter-solflare": "^0.6.32",
-    "@solana/wallet-adapter-wallets": "^0.19.37",
-    "@solana/web3.js": "^1.98.4",
+    "@tanstack/react-query": "^5.0.0",
+    "@wagmi/core": "^2.0.0",
+    "@wagmi/connectors": "^2.0.0",
+    "@web3modal/wagmi": "^4.0.0",
     "@splinetool/react-spline": "^4.1.0",
     "@splinetool/runtime": "^1.10.88",
     "axios": "^1.13.0",
@@ -35,6 +25,7 @@
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "ethers": "^6.9.0",
     "express": "^5.1.0",
     "gsap": "^3.13.0",
     "libsodium-wrappers": "^0.7.15",
@@ -47,7 +38,9 @@
     "tailwind-merge": "^3.3.1",
     "three": "^0.180.0",
     "twitter-api-v2": "^1.27.0",
-    "x402-solana": "^0.1.1"
+    "viem": "^2.0.0",
+    "wagmi": "^2.0.0",
+    "web3": "^4.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

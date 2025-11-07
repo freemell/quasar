@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
-import { Keypair } from '@solana/web3.js';
+import { ethers } from 'ethers';
 import { encryptPrivateKey } from '@/lib/crypto';
 
 // POST /api/tips/ingest
-// Body: { senderHandle: string, recipientHandle: string, amount: number, token?: 'SOL'|'USDC', tweetId: string }
+// Body: { senderHandle: string, recipientHandle: string, amount: number, token?: 'BNB'|'USDC', tweetId: string }
 // Creates recipient if missing (custodial wallet), records a pending claim on recipient
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
-    const { senderHandle, recipientHandle, amount, token = 'SOL', tweetId } = await req.json();
+    const { senderHandle, recipientHandle, amount, token = 'BNB', tweetId } = await req.json();
     if (!senderHandle || !recipientHandle || !amount || !tweetId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
@@ -39,15 +39,22 @@ export async function POST(req: NextRequest) {
     // Ensure recipient exists and has custodial wallet
     let recipient = await User.findOne({ handle: recipientH });
     if (!recipient) {
-      const kp = Keypair.generate();
-      const encrypted = encryptPrivateKey(kp.secretKey);
+      // Generate BSC wallet using ethers.js
+      const wallet = ethers.Wallet.createRandom();
+      const walletAddress = wallet.address;
+      const privateKey = wallet.privateKey;
+      
+      // Convert private key to buffer for encryption
+      const privateKeyBuffer = Buffer.from(privateKey.slice(2), 'hex'); // Remove '0x' prefix
+      const encrypted = encryptPrivateKey(privateKeyBuffer);
+      
       recipient = new User({
         twitterId: `temp_${Date.now()}`,
         handle: recipientH,
         name: recipientH.replace(/^@/, ''),
         profileImage: '',
         bio: '',
-        walletAddress: kp.publicKey.toString(),
+        walletAddress: walletAddress,
         encryptedPrivateKey: encrypted,
         isEmbedded: false,
         history: [],
@@ -61,9 +68,15 @@ export async function POST(req: NextRequest) {
         }
       }
     } else if (!recipient.walletAddress || !recipient.encryptedPrivateKey) {
-      const kp = Keypair.generate();
-      recipient.walletAddress = kp.publicKey.toString();
-      recipient.encryptedPrivateKey = encryptPrivateKey(kp.secretKey);
+      // Generate BSC wallet using ethers.js
+      const wallet = ethers.Wallet.createRandom();
+      const walletAddress = wallet.address;
+      const privateKey = wallet.privateKey;
+      
+      // Convert private key to buffer for encryption
+      const privateKeyBuffer = Buffer.from(privateKey.slice(2), 'hex'); // Remove '0x' prefix
+      recipient.walletAddress = walletAddress;
+      recipient.encryptedPrivateKey = encryptPrivateKey(privateKeyBuffer);
       await recipient.save();
     }
 

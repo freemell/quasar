@@ -1,11 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { getAccount, getMint } from '@solana/spl-token';
+import Web3 from 'web3';
+import { ethers } from 'ethers';
 
-// Create connection per request to use fresh RPC URL
-function getConnection() {
-  return new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
+// Create Web3 instance per request to use fresh RPC URL
+function getWeb3() {
+  const rpcUrl = process.env.NEXT_PUBLIC_BSC_RPC_URL || 'https://bsc-dataseed.binance.org';
+  return new Web3(rpcUrl);
 }
+
+function getProvider() {
+  const rpcUrl = process.env.NEXT_PUBLIC_BSC_RPC_URL || 'https://bsc-dataseed.binance.org';
+  return new ethers.JsonRpcProvider(rpcUrl);
+}
+
+// Standard ERC-20 ABI for balanceOf
+const ERC20_ABI = [
+  {
+    constant: true,
+    inputs: [{ name: '_owner', type: 'address' }],
+    name: 'balanceOf',
+    outputs: [{ name: 'balance', type: 'uint256' }],
+    type: 'function'
+  },
+  {
+    constant: true,
+    inputs: [],
+    name: 'decimals',
+    outputs: [{ name: '', type: 'uint8' }],
+    type: 'function'
+  },
+  {
+    constant: true,
+    inputs: [],
+    name: 'symbol',
+    outputs: [{ name: '', type: 'string' }],
+    type: 'function'
+  }
+];
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,37 +50,46 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const publicKey = new PublicKey(walletAddress);
-    const connection = getConnection();
-    
-    // Get SOL balance
-    const solBalance = await connection.getBalance(publicKey, 'confirmed');
-    const solBalanceFormatted = solBalance / LAMPORTS_PER_SOL;
+    // Validate BSC address format
+    if (!Web3.utils.isAddress(walletAddress)) {
+      return NextResponse.json(
+        { error: 'Invalid wallet address format' },
+        { status: 400 }
+      );
+    }
 
-    // Get token accounts (for USDC and other SPL tokens)
-    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-      programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
-    });
+    const web3 = getWeb3();
+    const provider = getProvider();
+    
+    // Get BNB balance
+    const balanceWei = await web3.eth.getBalance(walletAddress);
+    const bnbBalanceFormatted = parseFloat(web3.utils.fromWei(balanceWei, 'ether'));
+
+    // Known BEP-20 token addresses on BSC
+    const tokenAddresses = {
+      'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+      'USDT': '0x55d398326f99059fF775485246999027B3197955',
+      'BUSD': '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56'
+    };
 
     const tokenBalances = [];
     
-    for (const { account } of tokenAccounts.value) {
-      const tokenInfo = account.data.parsed.info;
-      const mintAddress = tokenInfo.mint;
-      const amount = tokenInfo.tokenAmount.uiAmount;
-      
-      // Get token metadata
+    // Check balance for each known token
+    for (const [symbol, tokenAddress] of Object.entries(tokenAddresses)) {
       try {
-        const mintInfo = await getMint(connection, new PublicKey(mintAddress));
-        const decimals = mintInfo.decimals;
-        const symbol = await getTokenSymbol(mintAddress);
+        const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+        const balance = await tokenContract.balanceOf(walletAddress);
+        const decimals = await tokenContract.decimals();
+        const amount = parseFloat(ethers.formatUnits(balance, decimals));
         
-        tokenBalances.push({
-          mint: mintAddress,
-          symbol: symbol || 'UNKNOWN',
-          amount: amount,
-          decimals: decimals
-        });
+        if (amount > 0) {
+          tokenBalances.push({
+            mint: tokenAddress,
+            symbol: symbol,
+            amount: amount,
+            decimals: decimals
+          });
+        }
       } catch (error) {
         // Skip tokens we can't process
         continue;
@@ -58,10 +98,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      sol: {
-        amount: solBalanceFormatted,
-        symbol: 'SOL',
-        decimals: 9
+      bnb: {
+        amount: bnbBalanceFormatted,
+        symbol: 'BNB',
+        decimals: 18
       },
       tokens: tokenBalances
     });
@@ -75,16 +115,5 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper function to get token symbol (simplified)
-async function getTokenSymbol(mintAddress: string): Promise<string | null> {
-  // In a real implementation, you would query a token registry or metadata service
-  // For now, we'll return known symbols for common tokens
-  const knownTokens: { [key: string]: string } = {
-    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': 'USDC', // USDC on Solana
-    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB': 'USDT', // USDT on Solana
-  };
-  
-  return knownTokens[mintAddress] || null;
-}
 
 
