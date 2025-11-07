@@ -9,7 +9,7 @@ export default function PrivacyPolicyPage() {
 
         <section className="space-y-6 text-white/80 leading-relaxed">
           <p>
-            Pourboire ("we", "us", "our") respects your privacy. This policy explains what information we
+            Quasar ("we", "us", "our") respects your privacy. This policy explains what information we
             collect, how we use it, and your choices. By using our website or app, you agree to this policy.
           </p>
 
@@ -82,7 +82,7 @@ export default function PrivacyPolicyPage() {
 
           <h2 className="text-2xl text-white font-medium mt-8">Contact</h2>
           <p>
-            For privacy questions or requests, contact: privacy@pourboire.app
+            For privacy questions or requests, contact: privacy@quasar.tips
           </p>
         </section>
       </div>

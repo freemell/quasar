@@ -1,5 +1,5 @@
 export default function Footer() {
-  const contactAddress = 'jwByd6QTKh94rhz9TtGrf97cNisrrQtXR1MRJ9cpump';
+  const contactAddress = '0x0000000000000000000000000000000000000000'; // BSC address placeholder
   
   return (
     <footer className="w-full border-t border-white/10 bg-black/40 backdrop-blur-sm">
@@ -7,7 +7,7 @@ export default function Footer() {
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="text-center md:text-left">
             <p className="text-white/70 text-sm font-light">
-              © {new Date().getFullYear()} Pourboire. All rights reserved.
+              © {new Date().getFullYear()} Quasar. All rights reserved.
             </p>
           </div>
           
@@ -15,7 +15,7 @@ export default function Footer() {
             <div className="text-center md:text-right">
               <p className="text-white/60 text-xs font-light mb-1">Contact Address</p>
               <p className="text-white/90 font-mono text-sm">
-                CA {contactAddress}
+                {contactAddress}
               </p>
             </div>
             

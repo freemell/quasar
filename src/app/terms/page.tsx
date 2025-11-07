@@ -9,7 +9,7 @@ export default function TermsOfServicePage() {
 
         <section className="space-y-6 text-white/80 leading-relaxed">
           <p>
-            These Terms govern your access to and use of Pourboire (the "Service"). By using the Service,
+            These Terms govern your access to and use of Quasar (the "Service"). By using the Service,
             you agree to these Terms.
           </p>
 
@@ -49,7 +49,7 @@ export default function TermsOfServicePage() {
 
           <h2 className="text-2xl text-white font-medium mt-8">Limitation of Liability</h2>
           <p>
-            To the fullest extent permitted by law, Pourboire and its affiliates will not be liable for any
+            To the fullest extent permitted by law, Quasar and its affiliates will not be liable for any
             indirect, incidental, special, consequential, or punitive damages, or any loss of profits or
             revenues, whether incurred directly or indirectly, or any loss of data, use, goodwill, or other
             intangible losses.
@@ -80,7 +80,7 @@ export default function TermsOfServicePage() {
 
           <h2 className="text-2xl text-white font-medium mt-8">Contact</h2>
           <p>
-            For terms questions, contact: legal@pourboire.app
+            For terms questions, contact: legal@quasar.tips
           </p>
         </section>
       </div>

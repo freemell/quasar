@@ -93,7 +93,7 @@ export default function Dashboard() {
       const twitterAccount = user?.linkedAccounts?.find((a: any) => a.type === 'twitter_oauth') as any;
       const twitterId = twitterAccount?.subject || twitterAccount?.providerId || undefined;
       
-      // Don't pass Privy embedded wallet - we want to find/create the custodial wallet
+      // Fetch or create the custodial BSC wallet for this user
       console.log('Fetching custodial wallet for:', { handle, twitterId });
       
       const res = await fetch('/api/wallet/ensure-tip-account', {
@@ -107,13 +107,12 @@ export default function Dashboard() {
       if (!res.ok) {
         const errorText = await res.text();
         console.error('ensure-tip-account failed:', errorText);
-        // Don't fall back to Privy embedded wallet - we need the custodial wallet
         // The API should always return a wallet address for registered users
         return;
       }
       const data = await res.json();
       if (data?.walletAddress) {
-        // Always use the custodial wallet from the database, never Privy embedded wallet
+        // Always use the custodial BSC wallet from the database
         setTipAddress(data.walletAddress);
         await fetchWalletBalance(data.walletAddress);
         await fetchPendingAndHistory(data.walletAddress);
@@ -123,7 +122,6 @@ export default function Dashboard() {
       }
     } catch (e) {
       console.error('ensure-tip-account error', e);
-      // Don't fall back to Privy embedded wallet - we need the custodial wallet
     }
   };
 
@@ -155,7 +153,7 @@ export default function Dashboard() {
     }
   }, [isConfirmed, hash, tipAddress]);
 
-  // Handle user profile from Privy linked accounts
+  // Handle user profile from authentication linked accounts
   useEffect(() => {
     if (user) {
       const twitterAccount = user.linkedAccounts.find((a: any) => a.type === 'twitter_oauth') as any;

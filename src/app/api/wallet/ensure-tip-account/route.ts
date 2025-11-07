@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Keypair } from '@solana/web3.js';
+import { Wallet } from 'ethers';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
 import { encryptPrivateKey } from '@/lib/crypto';
@@ -47,9 +47,10 @@ export async function POST(req: NextRequest) {
 
     // If user exists but lacks a custodial tip wallet, create one
     if (user && (!user.encryptedPrivateKey || !user.walletAddress)) {
-      const kp = Keypair.generate();
-      const encrypted = encryptPrivateKey(kp.secretKey);
-      user.walletAddress = kp.publicKey.toString();
+      const wallet = Wallet.createRandom();
+      const privateKeyBuffer = Buffer.from(wallet.privateKey.slice(2), 'hex');
+      const encrypted = encryptPrivateKey(privateKeyBuffer);
+      user.walletAddress = wallet.address;
       user.encryptedPrivateKey = encrypted;
       await user.save();
       return NextResponse.json({ success: true, walletAddress: user.walletAddress, created: true });
@@ -64,23 +65,24 @@ export async function POST(req: NextRequest) {
 
     if (preCreatedUser && preCreatedUser.walletAddress && preCreatedUser.encryptedPrivateKey) {
       // Assign the pre-created wallet to the new user account
-      // Update with real Twitter ID and user data from Privy
+      // Update with real Twitter ID and user data
       preCreatedUser.twitterId = twitterId || preCreatedUser.twitterId;
-      // Keep the existing walletAddress and encryptedPrivateKey (SOL is already in it)
+      // Keep the existing walletAddress and encryptedPrivateKey (BNB is already in it)
       await preCreatedUser.save();
       return NextResponse.json({ success: true, walletAddress: preCreatedUser.walletAddress, created: false, wasPreCreated: true });
     }
 
     // No pre-created wallet found - create a new user with new wallet
-    const kp = Keypair.generate();
-    const encrypted = encryptPrivateKey(kp.secretKey);
+    const wallet = Wallet.createRandom();
+    const privateKeyBuffer = Buffer.from(wallet.privateKey.slice(2), 'hex');
+    const encrypted = encryptPrivateKey(privateKeyBuffer);
     user = new User({
       twitterId: twitterId || `temp_${Date.now()}`,
       handle: normalizedHandle,
       name: normalizedHandle.replace(/^@/, ''),
       profileImage: '',
       bio: '',
-      walletAddress: kp.publicKey.toString(),
+      walletAddress: wallet.address,
       encryptedPrivateKey: encrypted,
       isEmbedded: false,
       history: [],

@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
         name: twitterUser.name,
         profileImage: twitterUser.profile_image_url,
         bio: twitterUser.description || '',
-        walletAddress: '', // Will be set by Privy embedded wallet
-        isEmbedded: true,
+        walletAddress: '', // Will be set by custodial wallet creation
+        isEmbedded: false,
         history: [],
         pendingClaims: []
       });
