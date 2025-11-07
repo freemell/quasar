@@ -1,19 +1,19 @@
 # X (Twitter) API Use Cases for Quasar
 
 ## Application Overview
-Quasar is a blockchain-based tipping platform that enables users to send BNB (Binance Smart Chain) tips to any X (Twitter) post through the @Quasaronsol bot. The platform integrates X's API to monitor mentions, process tip commands, and provide real-time transaction confirmations.
+Quasar is a blockchain-based tipping platform that enables users to send BNB (Binance Smart Chain) tips to any X (Twitter) post through the @Quasartip bot. The platform integrates X's API to monitor mentions, process tip commands, and provide real-time transaction confirmations.
 
 ## Specific Use Cases
 
 ### 1. **Mention Monitoring & Tip Command Processing**
-**Purpose**: Monitor real-time mentions of @Quasaronsol to detect and process tip commands from users.
+**Purpose**: Monitor real-time mentions of @Quasartip to detect and process tip commands from users.
 
 **Implementation**:
-- Continuously search for tweets mentioning "@Quasaronsol" using the Search Tweets API
+- Continuously search for tweets mentioning "@Quasartip" using the Search Tweets API
 - Parse tip commands in various formats:
-  - "@Quasaronsol tip 0.01 bnb @username"
-  - "@Quasaronsol tip 0.01 @username"
-  - "@Quasaronsol tip @username 0.01 bnb"
+  - "@Quasartip tip 0.01 bnb @username"
+  - "@Quasartip tip 0.01 @username"
+  - "@Quasartip tip @username 0.01 bnb"
 - Extract sender, recipient, amount, and token type from tweet text
 - Process batched tips (multiple tips from same sender to same recipient) into single blockchain transactions
 
@@ -147,7 +147,7 @@ Quasar is a blockchain-based tipping platform that enables users to send BNB (Bi
 
 ## User Experience Flow
 
-1. **User sends tip**: "@Quasaronsol tip 0.01 bnb @recipient"
+1. **User sends tip**: "@Quasartip tip 0.01 bnb @recipient"
 2. **Bot detects mention**: Searches for mentions every 2 minutes
 3. **Bot processes tip**: Validates sender, creates recipient wallet if needed, executes blockchain transaction
 4. **Bot replies**: Posts confirmation tweet with transaction hash and BscScan link
@@ -157,7 +157,7 @@ Quasar is a blockchain-based tipping platform that enables users to send BNB (Bi
 
 ## Compliance & Best Practices
 
-- All automated tweets clearly identify the bot account (@Quasaronsol)
+- All automated tweets clearly identify the bot account (@Quasartip)
 - Replies are contextual and directly related to the original tweet
 - Transaction hashes provide transparency and verifiability
 - Error messages are helpful and non-spammy

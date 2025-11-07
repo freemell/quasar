@@ -5,19 +5,19 @@ import { searchMentions, postTweet } from '@/lib/twitter';
 import Web3 from 'web3';
 import { decryptPrivateKey } from '@/lib/crypto';
 
-const BOT_HANDLE = '@Quasaronsol';
+const BOT_HANDLE = '@Quasartip';
 const BSC_RPC_URL = process.env.NEXT_PUBLIC_BSC_RPC_URL || 'https://bsc-dataseed.binance.org';
 const web3 = new Web3(BSC_RPC_URL);
 
 function parseTip(text: string): { amount: number; token: 'BNB'|'USDC'; recipientHandle: string } | null {
   // More flexible parsing - handles formats like:
-  // "@Quasaronsol tip 0.01 bnb @username"
-  // "@Quasaronsol tip 0.01 @username"
-  // "@Quasaronsol tip 0.01BNB @username"
-  // "@Quasaronsol tip @username 0.01 bnb"
+  // "@Quasartip tip 0.01 bnb @username"
+  // "@Quasartip tip 0.01 @username"
+  // "@Quasartip tip 0.01BNB @username"
+  // "@Quasartip tip @username 0.01 bnb"
   
   // First try: standard format with token before recipient
-  let re = /@quasaronsol\s+tip\s+(\d+(?:\.\d+)?)\s*(bnb|usdc)?\s+@([a-z0-9_]+)/i;
+  let re = /@quasartip\s+tip\s+(\d+(?:\.\d+)?)\s*(bnb|usdc)?\s+@([a-z0-9_]+)/i;
   let m = text.match(re);
   if (m) {
     const amount = Number(m[1]);
@@ -27,7 +27,7 @@ function parseTip(text: string): { amount: number; token: 'BNB'|'USDC'; recipien
   }
   
   // Second try: format with recipient before amount
-  re = /@quasaronsol\s+tip\s+@([a-z0-9_]+)\s+(\d+(?:\.\d+)?)\s*(bnb|usdc)?/i;
+  re = /@quasartip\s+tip\s+@([a-z0-9_]+)\s+(\d+(?:\.\d+)?)\s*(bnb|usdc)?/i;
   m = text.match(re);
   if (m) {
     const amount = Number(m[2]);
@@ -37,7 +37,7 @@ function parseTip(text: string): { amount: number; token: 'BNB'|'USDC'; recipien
   }
   
   // Third try: amount without explicit token (default to BNB), recipient anywhere
-  re = /@quasaronsol\s+tip\s+(\d+(?:\.\d+)?)\s+@([a-z0-9_]+)/i;
+  re = /@quasartip\s+tip\s+(\d+(?:\.\d+)?)\s+@([a-z0-9_]+)/i;
   m = text.match(re);
   if (m) {
     const amount = Number(m[1]);

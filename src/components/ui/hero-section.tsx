@@ -276,7 +276,7 @@ export function Component() {
               </span>
               <span className="word" data-delay="5750"> </span>
               <span className="word" data-delay="5900">
-                @Quasaronsol.
+                @Quasartip.
               </span>
             </div>
             <div

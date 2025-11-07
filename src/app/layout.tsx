@@ -17,24 +17,36 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Quasar - Share Your BNB Easily on X",
-  description: "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasaronsol.",
+  description: "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasartip.",
   openGraph: {
     title: "Quasar - Share Your BNB Easily on X",
-    description: "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasaronsol.",
+    description: "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasartip.",
     url: "https://quasar.tips/",
     siteName: "Quasar",
-    images: [],
+    images: [
+      {
+        url: "https://quasar.tips/quasar-logo.png",
+        width: 1200,
+        height: 630,
+        alt: "Quasar tipping platform"
+      }
+    ],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "Quasar - Share Your BNB Easily on X",
-    description: "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasaronsol.",
+    description: "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasartip.",
+    images: ["https://quasar.tips/quasar-logo.png"]
   },
   icons: {
-    icon: "/quasar-icon.svg",
-    shortcut: "/quasar-icon.svg",
-    apple: "/quasar-icon.svg",
+    icon: [
+      { url: "/quasar-logo.png", rel: "icon", type: "image/png" },
+      { url: "/quasar-logo.png", rel: "shortcut icon", type: "image/png" }
+    ],
+    apple: [
+      { url: "/quasar-logo.png", type: "image/png" }
+    ],
   },
 };
 
@@ -53,9 +65,9 @@ export default function RootLayout({
               "@context": "https://schema.org",
               "@type": "WebSite",
               "name": "Quasar",
-              "description": "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasaronsol.",
+              "description": "This is Quasar - Share your BNB easily on X and anonymous transactions powered by x402. Send instant BNB tips to any X post with @Quasartip.",
               "url": "https://quasar.tips/",
-              "sameAs": ["https://x.com/Quasaronsol"]
+              "sameAs": ["https://x.com/Quasartip"]
             })
           }}
         />

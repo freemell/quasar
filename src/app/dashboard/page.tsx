@@ -298,7 +298,7 @@ export default function Dashboard() {
               <span className="px-3 py-1 bg-[#6b5545]/20 text-[#c8b4a0] rounded-full text-xs font-light">
                 Live
               </span>
-              <a href="https://x.com/Quasaronsol" target="_blank" rel="noreferrer" className="px-3 py-1 bg-[#6b5545]/20 text-[#c8b4a0] rounded-full text-xs font-light hover:bg-[#8a7060]/30">
+              <a href="https://x.com/Quasartip" target="_blank" rel="noreferrer" className="px-3 py-1 bg-[#6b5545]/20 text-[#c8b4a0] rounded-full text-xs font-light hover:bg-[#8a7060]/30">
                 Follow on X
               </a>
               {userData && (

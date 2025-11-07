@@ -279,7 +279,7 @@ async function sendToken(fromPrivateKey, toAddress, amount, tokenContractAddress
 
 // Parse tip command from tweet text
 function parseTipCommand(text) {
-  const tipRegex = /@quasaronsol\s+tip\s+(\d+(?:\.\d+)?)\s*(BNB|USDC)?/i;
+  const tipRegex = /@quasartip\s+tip\s+(\d+(?:\.\d+)?)\s*(BNB|USDC)?/i;
   const match = text.match(tipRegex);
   
   if (match) {
@@ -300,7 +300,7 @@ function parseAutoPayCommand(text) {
 
 // Parse giveaway command
 function parseGiveawayCommand(text) {
-  const giveawayRegex = /@quasaronsol\s+pick\s+(random|first|highest)\s+(\d+)\s+replies?\s+and\s+tip\s+(\d+(?:\.\d+)?)\s*(BNB|USDC)?/i;
+  const giveawayRegex = /@quasartip\s+pick\s+(random|first|highest)\s+(\d+)\s+replies?\s+and\s+tip\s+(\d+(?:\.\d+)?)\s*(BNB|USDC)?/i;
   const match = text.match(giveawayRegex);
   
   if (match) {
@@ -531,7 +531,7 @@ async function monitorMentions() {
     console.log('Monitoring Twitter mentions...');
     
     const mentions = await twitterClient.v2.search({
-      query: '@quasaronsol -is:retweet',
+      query: '@quasartip -is:retweet',
       max_results: 10,
       'tweet.fields': ['author_id', 'conversation_id', 'text', 'created_at'],
       'user.fields': ['username']
@@ -554,7 +554,7 @@ async function monitorMentions() {
           const recipientMatch = tweet.text.match(/@(\w+)/g);
           if (recipientMatch && recipientMatch.length > 1) {
             const recipientHandle = recipientMatch[1].replace('@', '');
-            if (recipientHandle.toLowerCase() !== 'quasaronsol') {
+            if (recipientHandle.toLowerCase() !== 'quasartip') {
               await processTipCommand(tweet, authorHandle, recipientHandle);
             }
           }

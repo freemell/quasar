@@ -100,11 +100,11 @@ const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'type-command',
-    title: 'Type @Quasar Command',
-    description: 'Type "@Quasar tip 0.5 BNB" to send a tip',
+    title: 'Type @Quasartip Command',
+    description: 'Type "@Quasartip tip 0.5 BNB" to send a tip',
     action: 'Type the command',
     highlight: 'text-input',
-    keyboardAction: '@Quasar tip 0.5 BNB',
+    keyboardAction: '@Quasartip tip 0.5 BNB',
     screenContent: (
       <div className="h-full bg-black text-white flex flex-col">
         <div className="flex items-center p-4 border-b border-white/10">
@@ -119,7 +119,7 @@ const tutorialSteps: TutorialStep[] = [
               className="flex-grow bg-transparent text-white placeholder-[#c8b4a0] focus:outline-none resize-none font-mono"
               placeholder="Post your reply"
               rows={4}
-              value="@username @Quasar tip 0.5 BNB"
+              value="@username @Quasartip tip 0.5 BNB"
               readOnly
             ></textarea>
           </div>
@@ -148,7 +148,7 @@ const tutorialSteps: TutorialStep[] = [
               className="flex-grow bg-transparent text-white placeholder-[#c8b4a0] focus:outline-none resize-none font-mono"
               placeholder="Post your reply"
               rows={4}
-              value="@username @Quasar tip 0.5 BNB"
+              value="@username @Quasartip tip 0.5 BNB"
               readOnly
             ></textarea>
           </div>
