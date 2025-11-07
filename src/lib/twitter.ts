@@ -9,6 +9,11 @@ function getTwitterClient() {
       throw new Error('Twitter API credentials not configured');
     }
     
+    // Check if access tokens are provided (required for write operations)
+    if (!process.env.TWITTER_ACCESS_TOKEN || !process.env.TWITTER_ACCESS_SECRET) {
+      console.warn('⚠️ Twitter access tokens not configured - write operations will fail');
+    }
+    
     client = new TwitterApi({
       appKey: process.env.TWITTER_API_KEY,
       appSecret: process.env.TWITTER_API_SECRET,
@@ -16,7 +21,14 @@ function getTwitterClient() {
       accessSecret: process.env.TWITTER_ACCESS_SECRET,
     });
     
+    // Use readOnly for read operations, but client itself has write permissions if access tokens are provided
     bearerClient = client.readOnly;
+    
+    console.log('✅ Twitter client initialized', {
+      hasAccessToken: !!process.env.TWITTER_ACCESS_TOKEN,
+      hasAccessSecret: !!process.env.TWITTER_ACCESS_SECRET,
+      canWrite: !!(process.env.TWITTER_ACCESS_TOKEN && process.env.TWITTER_ACCESS_SECRET)
+    });
   }
   
   return { client, bearerClient };
@@ -78,6 +90,18 @@ export async function getUserProfile(userId: string): Promise<TwitterUser | null
 
 export async function postTweet(text: string, replyToTweetId?: string): Promise<string | null> {
   try {
+    // Check if Twitter API credentials are configured
+    if (!process.env.TWITTER_API_KEY || !process.env.TWITTER_API_SECRET || 
+        !process.env.TWITTER_ACCESS_TOKEN || !process.env.TWITTER_ACCESS_SECRET) {
+      console.error('Twitter API credentials not configured. Missing:', {
+        hasApiKey: !!process.env.TWITTER_API_KEY,
+        hasApiSecret: !!process.env.TWITTER_API_SECRET,
+        hasAccessToken: !!process.env.TWITTER_ACCESS_TOKEN,
+        hasAccessSecret: !!process.env.TWITTER_ACCESS_SECRET
+      });
+      return null;
+    }
+    
     const { client } = getTwitterClient();
     
     if (!client) {
@@ -101,29 +125,56 @@ export async function postTweet(text: string, replyToTweetId?: string): Promise<
       };
     }
     
-    console.log('Posting tweet:', { text: tweetOptions.text, replyToTweetId, hasReply: !!replyToTweetId });
+    console.log('Posting tweet:', { 
+      text: tweetOptions.text.substring(0, 50) + '...', 
+      replyToTweetId, 
+      hasReply: !!replyToTweetId,
+      textLength: tweetOptions.text.length
+    });
     
+    // Use the authenticated client (not readOnly) for posting tweets
     const tweet = await client.v2.tweet(tweetOptions);
     
     if (tweet?.data?.id) {
-      console.log('Tweet posted successfully:', tweet.data.id);
-      return tweet.data.id;
+      console.log('✅ Tweet posted successfully:', tweet.data.id);
+      return String(tweet.data.id);
     } else {
-      console.error('Tweet posted but no ID returned:', tweet);
+      console.error('❌ Tweet posted but no ID returned:', JSON.stringify(tweet, null, 2));
       return null;
     }
   } catch (error: any) {
-    console.error('Error posting tweet:', {
+    const errorDetails = {
       message: error?.message,
       code: error?.code,
+      statusCode: error?.code || error?.statusCode,
       data: error?.data,
-      stack: error?.stack
-    });
+      errors: error?.errors,
+      stack: error?.stack?.split('\n').slice(0, 5).join('\n')
+    };
+    
+    console.error('❌ Error posting tweet:', errorDetails);
     
     // Log full error details for debugging
     if (error?.data) {
       console.error('Twitter API error details:', JSON.stringify(error.data, null, 2));
     }
+    
+    if (error?.errors) {
+      console.error('Twitter API errors:', JSON.stringify(error.errors, null, 2));
+    }
+    
+    // Check for common error codes
+    if (error?.code === 403 || error?.statusCode === 403) {
+      console.error('❌ Twitter API: Forbidden - Check if your app has write permissions and access tokens are valid');
+    } else if (error?.code === 401 || error?.statusCode === 401) {
+      console.error('❌ Twitter API: Unauthorized - Check if your access tokens are valid');
+    } else if (error?.code === 429 || error?.statusCode === 429) {
+      console.error('❌ Twitter API: Rate limit exceeded - Wait before retrying');
+    }
+    
+    // Also log to a file or external service in production
+    // For now, we'll make sure errors are visible in console
+    console.error('Full error object:', JSON.stringify(errorDetails, null, 2));
     
     return null;
   }
@@ -136,7 +187,7 @@ export async function searchMentions(query: string, sinceId?: string): Promise<a
       'tweet.fields': ['id', 'text', 'author_id', 'created_at', 'public_metrics'],
       'user.fields': ['id', 'username', 'name'],
       expansions: ['author_id'],
-      max_results: 50,
+      max_results: 10, // Reduced from 50 to avoid rate limits
       since_id: sinceId,
     });
     // twitter-api-v2 returns paginator with data and includes; merge author info
@@ -175,8 +226,29 @@ export async function searchMentions(query: string, sinceId?: string): Promise<a
     }
     
     return tweets;
-  } catch (error) {
-    console.error('Error searching mentions:', error);
+  } catch (error: any) {
+    // Handle rate limiting specifically
+    if (error?.code === 429 || error?.statusCode === 429) {
+      const rateLimit = error?.rateLimit;
+      const resetTime = rateLimit?.reset ? new Date(rateLimit.reset * 1000) : null;
+      const waitTime = resetTime ? Math.max(0, resetTime.getTime() - Date.now()) : 900000; // Default 15 minutes
+      
+      console.error('❌ Twitter API: Rate limit exceeded for search mentions', {
+        resetTime: resetTime?.toISOString(),
+        waitTimeMs: waitTime,
+        waitTimeMinutes: Math.ceil(waitTime / 60000)
+      });
+      
+      // Return empty array to prevent further processing
+      return [];
+    }
+    
+    console.error('Error searching mentions:', {
+      message: error?.message,
+      code: error?.code,
+      statusCode: error?.statusCode,
+      rateLimit: error?.rateLimit
+    });
     return [];
   }
 }

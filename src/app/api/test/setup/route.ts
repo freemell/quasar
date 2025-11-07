@@ -20,6 +20,12 @@ export async function GET() {
       },
       encryption: {
         key: process.env.ENCRYPTION_KEY ? '✅ Set' : '❌ Missing'
+      },
+      twitter: {
+        apiKey: process.env.TWITTER_API_KEY ? '✅ Set' : '❌ Missing',
+        apiSecret: process.env.TWITTER_API_SECRET ? '✅ Set' : '❌ Missing',
+        accessToken: process.env.TWITTER_ACCESS_TOKEN ? '✅ Set' : '❌ Missing',
+        accessSecret: process.env.TWITTER_ACCESS_SECRET ? '✅ Set' : '❌ Missing'
       }
     };
 

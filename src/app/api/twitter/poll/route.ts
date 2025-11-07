@@ -56,7 +56,25 @@ export async function POST(req: NextRequest) {
     const { sinceId } = await req.json().catch(() => ({ sinceId: undefined }));
 
       // Pull recent mentions of the bot
-      const tweets = await searchMentions(`${BOT_HANDLE} -is:retweet`, sinceId);
+      // Handle rate limiting gracefully
+      let tweets: any[] = [];
+      try {
+        tweets = await searchMentions(`${BOT_HANDLE} -is:retweet`, sinceId);
+      } catch (searchError: any) {
+        // If rate limited, return early without processing
+        if (searchError?.code === 429 || searchError?.statusCode === 429) {
+          console.warn('⚠️ Rate limited - skipping this poll cycle');
+          return NextResponse.json({ 
+            success: true, 
+            processed: 0, 
+            message: 'Rate limited - will retry on next poll',
+            rateLimited: true
+          });
+        }
+        // Re-throw other errors
+        throw searchError;
+      }
+      
       if (!tweets.length) {
         return NextResponse.json({ success: true, processed: 0, message: 'No new mentions found' });
       }
@@ -331,9 +349,16 @@ export async function POST(req: NextRequest) {
               ? `A ${totalAmount} ${token} tip has been sent to your wallet!`
               : `${tips.length} tips totaling ${totalAmount} ${token} have been sent to your wallet!`;
             const replyText = `@${recipientUsername} pay from @${senderUsername} ${tipText} Tx: https://bscscan.com/tx/${sig}`;
-            const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
-            if (!replyId) {
-              console.error(`Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+            console.log(`Attempting to post reply to tweet ${t.id}:`, replyText);
+            try {
+              const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
+              if (!replyId) {
+                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+              } else {
+                console.log(`✅ Successfully posted reply ${replyId} to tweet ${t.id}`);
+              }
+            } catch (replyError: any) {
+              console.error(`❌ Exception while posting reply to tweet ${t.id}:`, replyError);
             }
           } else {
             // Recipient doesn't have account - record as pending claim (they can claim when they sign up)
@@ -357,9 +382,16 @@ export async function POST(req: NextRequest) {
               ? `A ${totalAmount} ${token} tip has been sent to your wallet!`
               : `${tips.length} tips totaling ${totalAmount} ${token} have been sent to your wallet!`;
             const replyText = `@${recipientUsername} pay from @${senderUsername} ${tipText} Claim it when you sign up on quasar.tips. Tx: https://bscscan.com/tx/${sig}`;
-            const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
-            if (!replyId) {
-              console.error(`Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+            console.log(`Attempting to post reply to tweet ${t.id}:`, replyText);
+            try {
+              const replyId = await postTweet(replyText, t.id ? String(t.id) : undefined);
+              if (!replyId) {
+                console.error(`❌ Failed to post reply to tweet ${t.id}. Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+              } else {
+                console.log(`✅ Successfully posted reply ${replyId} to tweet ${t.id}`);
+              }
+            } catch (replyError: any) {
+              console.error(`❌ Exception while posting reply to tweet ${t.id}:`, replyError);
             }
           }
 
@@ -386,9 +418,13 @@ export async function POST(req: NextRequest) {
             await recipient.save();
           }
           const message = `@${recipientUsername} pay from @${senderUsername} ${tips.length === 1 ? `A ${totalAmount} ${token} tip` : `${tips.length} tips totaling ${totalAmount} ${token}`} ${tips.length === 1 ? 'has' : 'have'} been recorded for you! Claim ${tips.length === 1 ? 'it' : 'them'} to receive the BscScan link:`;
-          const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
-          if (!replyId) {
-            console.error(`Failed to post reply to tweet ${t.id} (transfer failed). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+          try {
+            const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
+            if (!replyId) {
+              console.error(`❌ Failed to post reply to tweet ${t.id} (transfer failed). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+            }
+          } catch (replyError: any) {
+            console.error(`❌ Exception while posting reply to tweet ${t.id} (transfer failed):`, replyError);
           }
         }
       } else {
@@ -416,9 +452,13 @@ export async function POST(req: NextRequest) {
         // Format: "@recipient pay from @sender A X BNB tip has been recorded for you! Claim it to receive the BscScan link:"
         // Note: Sender must sign up on quasar.tips first to fund their wallet before the tip can be sent
         const message = `@${recipientUsername} pay from @${senderUsername} ${tips.length === 1 ? `A ${totalAmount} ${token} tip` : `${tips.length} tips totaling ${totalAmount} ${token}`} ${tips.length === 1 ? 'has' : 'have'} been recorded for you! The sender needs to sign up on quasar.tips first. Claim ${tips.length === 1 ? 'it' : 'them'} to receive the BscScan link:`;
-        const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
-        if (!replyId) {
-          console.error(`Failed to post reply to tweet ${t.id} (sender not registered). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+        try {
+          const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
+          if (!replyId) {
+            console.error(`❌ Failed to post reply to tweet ${t.id} (sender not registered). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
+          }
+        } catch (replyError: any) {
+          console.error(`❌ Exception while posting reply to tweet ${t.id} (sender not registered):`, replyError);
         }
       }
 
