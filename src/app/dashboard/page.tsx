@@ -337,7 +337,7 @@ export default function Dashboard() {
         {!user ? (
           <div className="text-center py-16">
             <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-r from-[#c8b4a0] to-[#a89080] rounded-full flex items-center justify-center">
-              <span className="text-3xl">🔗</span>
+              <img src="/twitter-logo.png" alt="X Logo" className="w-16 h-16 object-contain" />
             </div>
             <h2 className="text-3xl font-bold mb-4">Connect your account</h2>
             <p className="text-white/70 mb-8 max-w-md mx-auto">

@@ -215,6 +215,17 @@ export async function POST(req: NextRequest) {
       // - If recipient HAS an account (isEmbedded = true): send immediately, add to history, reply with BscScan link
       // - If recipient DOESN'T have an account (isEmbedded = false or no account): record as pending claim, they can claim when they sign up
       // - Only send if sender is registered and recipient has wallet
+      
+      // IMPORTANT: Mark tweets as processed BEFORE attempting transaction to prevent duplicate processing
+      // This prevents the same tweet from being processed multiple times if polling happens before transaction completes
+      for (const tip of tips) {
+        await ProcessedTweet.findOneAndUpdate(
+          { tweetId: tip.tweetId },
+          { tweetId: tip.tweetId, processedAt: new Date() },
+          { upsert: true, new: true }
+        );
+      }
+      
       if (senderIsRegistered && recipient && recipient.walletAddress && token === 'BNB') {
         try {
           // Decrypt sender's private key
@@ -354,15 +365,6 @@ export async function POST(req: NextRequest) {
 
           await sender.save();
           await recipient.save();
-
-          // Mark all tweets in this batch as processed
-          for (const tip of tips) {
-            await ProcessedTweet.findOneAndUpdate(
-              { tweetId: tip.tweetId },
-              { tweetId: tip.tweetId, processedAt: new Date() },
-              { upsert: true, new: true }
-            );
-          }
           
         } catch (e: any) {
           console.error('Failed to send batched tip on-chain:', e);
@@ -387,15 +389,6 @@ export async function POST(req: NextRequest) {
           const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
           if (!replyId) {
             console.error(`Failed to post reply to tweet ${t.id} (transfer failed). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
-          }
-          
-          // Mark tweets as processed even if transfer failed (to prevent retrying)
-          for (const tip of tips) {
-            await ProcessedTweet.findOneAndUpdate(
-              { tweetId: tip.tweetId },
-              { tweetId: tip.tweetId, processedAt: new Date() },
-              { upsert: true, new: true }
-            );
           }
         }
       } else {
@@ -426,15 +419,6 @@ export async function POST(req: NextRequest) {
         const replyId = await postTweet(message, t.id ? String(t.id) : undefined);
         if (!replyId) {
           console.error(`Failed to post reply to tweet ${t.id} (sender not registered). Tweet ID type: ${typeof t.id}, Value: ${t.id}`);
-        }
-        
-        // Mark tweets as processed even if sender not registered (to prevent retrying)
-        for (const tip of tips) {
-          await ProcessedTweet.findOneAndUpdate(
-            { tweetId: tip.tweetId },
-            { tweetId: tip.tweetId, processedAt: new Date() },
-            { upsert: true, new: true }
-          );
         }
       }
 
